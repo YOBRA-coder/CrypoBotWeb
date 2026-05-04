@@ -8,7 +8,8 @@ import {
   HistogramSeries,
   LineSeries,
   IChartApi,
-  UTCTimestamp
+  UTCTimestamp,
+  Time
 } from "lightweight-charts";
 
 interface Props {
@@ -80,7 +81,13 @@ export default function CandlesStick({
       lineWidth: 2
     });
 
-    const validCandles = candles.filter(c => c && c.time);
+    //const validCandles = candles.filter(c => c && c.time);
+    const validCandles = candles
+  .filter(c => c && c.time)
+  .map(c => ({
+    ...c,
+    time: (c.time / 1000) as Time // Convert ms to seconds and cast
+  }));
 
     const candleData = validCandles.map(c  => ({
         time: parseInt(c.time.toString()) / 1000 as UTCTimestamp,
