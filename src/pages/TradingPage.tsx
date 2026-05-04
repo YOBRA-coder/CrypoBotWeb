@@ -4,12 +4,8 @@ import type { PageProps } from "./shared";
 import { PAIR_DISPLAY, PAIRS, type OHLCV } from "../types";
 import { marketApi, tradesApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import CandlestickChart from "../components/CandlestickChart";
-import ProTradingChart from "../components/defaultChart";
 import ProTradingChart1 from "../components/viewPro";
 import { S } from "./styles";
-import { useLiveCandles } from "../components/Uselivecandles";
-
 // ── Technical Analysis ────────────────────────────────────────────────────────
 function rsi(closes: number[], p = 14) {
   if (closes.length < p + 1) return 50;

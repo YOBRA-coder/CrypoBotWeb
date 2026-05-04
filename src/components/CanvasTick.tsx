@@ -83,7 +83,7 @@ export default function CandlesStick({
     const validCandles = candles.filter(c => c && c.time);
 
     const candleData = validCandles.map(c  => ({
-        time: parseInt(c.time) / 1000 as UTCTimestamp,
+        time: parseInt(c.time.toString()) / 1000 as UTCTimestamp,
         open: c.open,
         high: c.high,
         low: c.low,
@@ -93,7 +93,7 @@ export default function CandlesStick({
     candleSeries.setData(validCandles);
     volumeSeries.setData(
       candles.map(c => ({
-        time: (parseInt(c.time) / 1000) as UTCTimestamp,
+        time: (parseInt(c.time.toString()) / 1000) as UTCTimestamp,
         value: c.volume,
         color: c.close >= c.open ? "#00d08455" : "#ff475755"
       }))
