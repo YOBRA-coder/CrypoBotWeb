@@ -65,8 +65,8 @@ export default function SettingsPage({ notify }: { notify: (msg: string, type?: 
         <div style={S.ch}>Backend Connection</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
           {[
-            { l: "API URL", v: import.meta.env.VITE_API_URL || "http://localhost:8000" },
-            { l: "WebSocket", v: (import.meta.env.VITE_WS_URL || "ws://localhost:8000") + "/ws/{token}" },
+            { l: "API URL", v: import.meta.env.VITE_API_URL || "https://cryptobotapi.onrender.com/" },
+            { l: "WebSocket", v: (import.meta.env.VITE_WS_URL || "ws://cryptobotapi.onrender.com/") + "/ws/{token}" },
           ].map(s => (
             <div key={s.l} style={{ background: "#060c14", border: "1px solid #0a1828", borderRadius: 7, padding: 11 }}>
               <div style={{ color: "#2e4060", fontSize: 9, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{s.l}</div>
