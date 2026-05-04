@@ -149,7 +149,7 @@ interface Props {
   }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function ProTradingChart({candles}): Props {
+export default function ProTradingChart({candles}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +193,7 @@ export default function ProTradingChart({candles}): Props {
   }, []);
 
   // Live price tick
+  /*
   useEffect(() => {
     const id = setInterval(() => {
       setCandles(prev => {
@@ -218,7 +219,7 @@ export default function ProTradingChart({candles}): Props {
     }, 800);
     return () => clearInterval(id);
   }, [candles]);
-
+*/
   const visibleCount = Math.floor(W / (candleW + 2));
   const start = Math.max(0, candles.length - visibleCount - offset);
   const end = Math.max(visibleCount, candles.length - offset);
