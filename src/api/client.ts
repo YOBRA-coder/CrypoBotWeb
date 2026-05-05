@@ -4,7 +4,7 @@ import type {
   User, Ticker, OHLCV, Signal, Bot, Trade, Strategy, BacktestResult,
 } from "../types";
 
-const BASE = "https://cryptobotapi.onrender.com/";
+const BASE = "https://cryptobotapi.onrender.com";
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
