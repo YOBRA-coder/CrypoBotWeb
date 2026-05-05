@@ -91,7 +91,7 @@ onKline: (updates: KlineUpdate[]) => {
     send({ type: "SUBSCRIBE_KLINES", symbol: sel, interval: iv });
   }, [sel, iv, send]);
 
-  
+  /*
   useEffect(() => {
     let cancelled = false;
   
@@ -134,7 +134,7 @@ onKline: (updates: KlineUpdate[]) => {
       clearInterval(interval);
     };
   }, [sel, iv]);
-
+*/
 // Then pass to chart:
 //<ProTradingChart candles={candles} loading={loading} symbol={sel} timeframe={iv} ... />
 
