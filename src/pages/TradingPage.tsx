@@ -1,12 +1,13 @@
 // pages/TradingPage.tsx
 import { useState, useEffect } from "react";
 import type { PageProps } from "./shared";
-import { PAIR_DISPLAY, PAIRS, type OHLCV } from "../types";
+import { KlineUpdate, PAIR_DISPLAY, PAIRS, type OHLCV } from "../types";
 import { marketApi, tradesApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ProTradingChart1 from "../components/viewPro";
 import { S } from "./styles";
 import CandlestickChart from "../components/CandlestickChart";
+import { useWebSocket } from "../hooks/useWebSocket";
 // ── Technical Analysis ────────────────────────────────────────────────────────
 function rsi(closes: number[], p = 14) {
   if (closes.length < p + 1) return 50;
@@ -49,6 +50,42 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
   const [aiLoading, setAiLoading] = useState(false);
   const ticker = tickers.find(t => t.symbol === sel);
   const ts = (t: typeof trades[0]) => t.created_at ? t.created_at * 1000 : t.timestamp || 0;
+   // 1. Initial Load (REST)
+  useEffect(() => {
+    let cancelled = false;
+    marketApi.klines(sel, iv, 100).then(data => {
+      if (!cancelled) setCandles(data);
+    });
+    return () => { cancelled = true; };
+  }, [sel, iv]);
+
+  // 2. Real-time updates via your existing hook
+  const { send } = useWebSocket(auth.token, {
+onKline: (updates: KlineUpdate[]) => { 
+  setCandles(prev => {
+    // 1. Create the map from previous candles
+    const map = new Map<number, KlineUpdate>(prev.map(c => [c.time, c]));
+
+    // 2. Loop through the array of updates and add each one to the map
+    updates.forEach((candle) => {
+      // Access 'time' on the individual 'candle', not the 'updates' array
+      map.set(candle.time, candle); 
+    });
+
+    // 3. Convert back to sorted array
+    return Array.from(map.values())
+      .sort((a, b) => a.time - b.time)
+      .slice(-100);
+  });
+}
+
+  });
+
+   useEffect(() => {
+    send({ type: "SUBSCRIBE_KLINES", symbol: sel, interval: iv });
+  }, [sel, iv, send]);
+
+  
   useEffect(() => {
     let cancelled = false;
   
@@ -103,6 +140,8 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
     }, 1000);
     
   };
+
+
 
 /*
   useEffect(() => {

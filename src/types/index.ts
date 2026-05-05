@@ -106,6 +106,15 @@ export interface BacktestResult {
   sharpeRatio: number;
   maxDrawdown: number;
 }
+// In your types file
+export type KlineUpdate = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
 
 // WebSocket message types
 export type WSMessage =
@@ -114,7 +123,8 @@ export type WSMessage =
   | { type: "NEW_TRADE"; data: Trade }
   | { type: "NEW_SIGNALS"; data: Signal[] }
   | { type: "INIT"; data: { bots: Bot[]; trades: Trade[]; signals: Signal[] } }
-  | { type: "PING" | "PONG" };
+  | { type: "PING" | "PONG" }
+  | {type: "KLINE"; data: KlineUpdate[]};
 
 export type Page = "dashboard" | "trading" | "signals" | "bots" | "strategy" | "history" | "settings";
 
