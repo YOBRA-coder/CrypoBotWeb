@@ -65,24 +65,23 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
         const updates = await marketApi.klines(sel, iv, 5); // Fetch last few
         
         if (!cancelled && updates.length) {
-          setCandles(prev => {
-            const next = [...prev];
-            
-            updates.forEach(upd => {
-              const lastIdx = next.length - 1;
-              
-              // IF timestamps match: Update the current "forming" candle
-              if (lastIdx >= 0 && next[lastIdx].time === upd.time) {
-                next[lastIdx] = upd;
-              } 
-              // IF timestamp is newer: Append a new candle
-              else if (lastIdx < 0 || upd.time > next[lastIdx].time) {
-                next.push(upd);
-              }
-            });
+      setCandles(prev => {
+  const map = new Map(prev.map(c => [c.time, c]));
+  let changed = false;
 
-            return next.slice(-100);
-          });
+  updates.forEach(upd => {
+    if (!map.has(upd.time) || JSON.stringify(map.get(upd.time)) !== JSON.stringify(upd)) {
+      map.set(upd.time, upd);
+      changed = true;
+    }
+  });
+
+  if (!changed) return prev;
+
+  return Array.from(map.values())
+    .sort((a, b) => a.time - b.time)
+    .slice(-100);
+});
         }
       }, 5000); // Poll every 5s for snappy updates
 

@@ -72,7 +72,7 @@ const INDICATOR_DEFS: IndicatorDef[] = [
 
 const PAD = { l: 8, r: 80, t: 8, b: 24 } as const;
 const SUB_H = 80;
-const SUB_GAP    = 6;
+const SUB_GAP = 6;
 const CANDLE_GAP = 2;
 const GRID_LINES = 6;
 const GREEN = "#00e676";
@@ -119,8 +119,8 @@ function calcMACD(closes: number[]): MACDData {
 // ─── Format helpers ───────────────────────────────────────────────────────────
 const fPrice = (v?: number | null, d = 2): string => {
   if (v == null) return "--";
-  if (v < 0.01)  return v.toFixed(6);
-  if (v < 1)     return v.toFixed(4);
+  if (v < 0.01) return v.toFixed(6);
+  if (v < 1) return v.toFixed(4);
   if (v < 10000) return v.toFixed(2);
   return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
 };
@@ -181,7 +181,7 @@ export default function ProTradingChart({
   const [crosshair, setCrosshair] = useState<Crosshair | null>(null);
   const [dims, setDims] = useState<Dims>({ w: 900, h: height });
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartX   = useRef<number | null>(null);
+  const dragStartX = useRef<number | null>(null);
   const dragStartOff = useRef(0);
 
   // Sync height prop
@@ -196,31 +196,31 @@ export default function ProTradingChart({
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
-// --- REMOVE THE MERGING LOGIC HERE ---
-// Simply use the 'candles' passed from props
-const lastClose = candles[candles.length - 1]?.close;
+  // --- REMOVE THE MERGING LOGIC HERE ---
+  // Simply use the 'candles' passed from props
+  const lastClose = candles[candles.length - 1]?.close;
 
-// Keep visual-only effects
-const prevLen = useRef(candles.length);
-useEffect(() => {
-  // Auto-scroll to newest when a new candle is added
-  if (candles.length > prevLen.current) {
-    setOffset(o => (o <= 5 ? 0 : o));
-  }
-  prevLen.current = candles.length;
-}, [candles.length]);
+  // Keep visual-only effects
+  const prevLen = useRef(candles.length);
+  useEffect(() => {
+    // Auto-scroll to newest when a new candle is added
+    if (candles.length > prevLen.current) {
+      setOffset(o => (o <= 5 ? 0 : o));
+    }
+    prevLen.current = candles.length;
+  }, [candles.length]);
 
-// Keep mock order-book updates if they depend on the price
-useEffect(() => {
-  if (lastClose != null) setOrderBook(mockOrderBook(lastClose));
-}, [lastClose]);
+  // Keep mock order-book updates if they depend on the price
+  useEffect(() => {
+    if (lastClose != null) setOrderBook(mockOrderBook(lastClose));
+  }, [lastClose]);
 
 
   // ── Derived geometry ─────────────────────────────────────────────────────────
   const hasRSI = activeIndicators.has("rsi");
   const hasMACD = activeIndicators.has("macd");
   const subCount = (hasRSI ? 1 : 0) + (hasMACD ? 1 : 0);
-  const mainH    = Math.max(80, dims.h - PAD.t - PAD.b - subCount * (SUB_H + SUB_GAP));
+  const mainH = Math.max(80, dims.h - PAD.t - PAD.b - subCount * (SUB_H + SUB_GAP));
   const W = dims.w - PAD.l - PAD.r;
 
   const visibleCount = Math.max(1, Math.floor(W / (candleW + CANDLE_GAP)));
@@ -261,15 +261,15 @@ useEffect(() => {
     [minP, range]
   );
 
-    // Best bid/ask from order book
-    const bestAsk = orderBook.asks[orderBook.asks.length - 1]?.price ?? 0;
-    const bestBid = orderBook.bids[0]?.price ?? 0;
-    const spread  = bestAsk - bestBid;
+  // Best bid/ask from order book
+  const bestAsk = orderBook.asks[orderBook.asks.length - 1]?.price ?? 0;
+  const bestBid = orderBook.bids[0]?.price ?? 0;
+  const spread = bestAsk - bestBid;
   // Sub-panel positions
   const rsiPanelY = PAD.t + mainH + PAD.b + 6;
   const macdPanelY = rsiPanelY + (hasRSI ? SUB_H + SUB_GAP : 0);
   const totalH = macdPanelY + (hasMACD ? SUB_H : 0) + PAD.b;
- 
+
   // ── Wheel zoom/pan ────────────────────────────────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
@@ -294,7 +294,7 @@ useEffect(() => {
 
   // ── Touch events for mobile pinch/pan ─────────────────────────────────────
   const lastTouchDist = useRef<number | null>(null);
-  const lastTouchX    = useRef<number | null>(null);
+  const lastTouchX = useRef<number | null>(null);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -309,15 +309,15 @@ useEffect(() => {
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     if (e.touches.length === 2 && lastTouchDist.current !== null) {
-      const dx   = e.touches[0].clientX - e.touches[1].clientX;
-      const dy   = e.touches[0].clientY - e.touches[1].clientY;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
       const ratio = dist / lastTouchDist.current;
       setCandleW(w => Math.min(40, Math.max(3, w * ratio)));
       lastTouchDist.current = dist;
     } else if (e.touches.length === 1 && lastTouchX.current !== null) {
       const delta = e.touches[0].clientX - lastTouchX.current;
-      const step  = Math.round(delta / (candleW + CANDLE_GAP));
+      const step = Math.round(delta / (candleW + CANDLE_GAP));
       if (step !== 0) {
         setOffset(o => Math.max(0, Math.min(candles.length - visibleCount, o - step)));
         lastTouchX.current = e.touches[0].clientX;
@@ -327,27 +327,27 @@ useEffect(() => {
 
   const handleTouchEnd = useCallback(() => {
     lastTouchDist.current = null;
-    lastTouchX.current    = null;
+    lastTouchX.current = null;
   }, []);
 
 
   // ── Mouse events ──────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
-    const rect  = svgRef.current.getBoundingClientRect();
-    const mx    = e.clientX - rect.left;
-    const my    = e.clientY - rect.top;
+    const rect = svgRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
     if (isDragging && dragStartX.current !== null) {
       const delta = mx - dragStartX.current;
-      const step  = Math.round(delta / (candleW + CANDLE_GAP));
+      const step = Math.round(delta / (candleW + CANDLE_GAP));
       if (step !== 0) {
         setOffset(Math.max(0, Math.min(candles.length - visibleCount, dragStartOff.current - step)));
       }
     }
 
-    const price  = minP + ((PAD.t + mainH - my) / mainH) * range;
-    const ci     = Math.floor((mx - PAD.l) / (candleW + CANDLE_GAP));
+    const price = minP + ((PAD.t + mainH - my) / mainH) * range;
+    const ci = Math.floor((mx - PAD.l) / (candleW + CANDLE_GAP));
     const candle = slice[ci];
     if (my >= PAD.t && my <= PAD.t + mainH) {
       setCrosshair({ x: mx, y: my, price, time: candle?.time });
@@ -417,10 +417,10 @@ useEffect(() => {
           </div>
         )}
 
-      {/* Bid / Ask / Spread */}
-      <div style={{ display: "flex", gap: 10, fontSize: 10 }}>
+        {/* Bid / Ask / Spread */}
+        <div style={{ display: "flex", gap: 10, fontSize: 10 }}>
           <span>BID <b style={{ color: GREEN }}>{fPrice(bestBid)}</b></span>
-          <span>ASK <b style={{ color: RED   }}>{fPrice(bestAsk)}</b></span>
+          <span>ASK <b style={{ color: RED }}>{fPrice(bestAsk)}</b></span>
           <span style={{ color: "#2e4a68" }}>SPR <b style={{ color: "#4a6080" }}>{fPrice(spread)}</b></span>
         </div>
 
@@ -441,10 +441,10 @@ useEffect(() => {
               padding: "4px 9px", fontSize: 10, fontFamily: "inherit",
               background: timeframe === tf ? "#112240" : "transparent",
               color: timeframe === tf ? "#4da6ff" : "#2a4060",
-              border:`1px solid ${timeframe === tf ? "#1e4a7a" : "transparent"}`,
+              border: `1px solid ${timeframe === tf ? "#1e4a7a" : "transparent"}`,
               borderRadius: 4, cursor: "pointer",
               fontWeight: timeframe === tf ? 700 : 400,
-             // transition: "all 0.15s",
+              // transition: "all 0.15s",
             }}>{tf}</button>
           ))}
         </div>
@@ -544,9 +544,9 @@ useEffect(() => {
 
         {/* ── SVG Chart ───────────────────────────────────────────────────── */}
         <div ref={containerRef} style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}
-         onTouchStart={handleTouchStart}
-         onTouchMove={handleTouchMove}
-         onTouchEnd={handleTouchEnd}>
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}>
           {candles.length === 0 ? (
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
@@ -558,14 +558,14 @@ useEffect(() => {
           ) : (
             <svg
               ref={svgRef}
-             width={dims.w} height={ "500"}
-            viewBox={`0 0 ${dims.w} ${totalH}`}
-            preserveAspectRatio="none"
+              width={dims.w} height={"500"}
+              viewBox={`0 0 ${dims.w} ${totalH}`}
+              preserveAspectRatio="none"
               style={{ display: "block", cursor: isDragging ? "grabbing" : "crosshair", touchAction: "none" }}
               onMouseDown={e => {
                 setIsDragging(true);
                 const rect = svgRef.current?.getBoundingClientRect();
-                dragStartX.current   = e.clientX - (rect?.left ?? 0);
+                dragStartX.current = e.clientX - (rect?.left ?? 0);
                 dragStartOff.current = offset;
               }}
               onMouseMove={handleMouseMove}
@@ -626,10 +626,10 @@ useEffect(() => {
                 );
               })}
 
-               {/* ── Best Bid / Ask lines ── */}
-               {[
+              {/* ── Best Bid / Ask lines ── */}
+              {[
                 { v: bestBid, col: GREEN + "66", tag: "BID" },
-                { v: bestAsk, col: RED   + "66", tag: "ASK" },
+                { v: bestAsk, col: RED + "66", tag: "ASK" },
               ].map(({ v, col, tag }) => {
                 const y = toY(v);
                 if (!v || y < PAD.t - 2 || y > PAD.t + mainH + 2) return null;
@@ -718,19 +718,19 @@ useEffect(() => {
               )}
               {trades.map(t => {
 
-const y = toY(t.price)
-return (
-  <g key={t.id}>
-  <line x1={PAD.l} y1={y} x2={dims.w - PAD.r} y2={y}
-  stroke={t.side === "BUY" ? "#0ECB81" : "#F6465D"}  strokeDasharray="4 4"/>
-  <text x={dims.w - PAD.r + 4} y={y - 2} fill={t.side === "BUY" ? "#0ECB81" : "#F6465D"}
-    fontSize={8} fontFamily="inherit">
-    {t.side} {f2(t.price, 0)}
-  </text>
-</g>
-)
+                const y = toY(t.price)
+                return (
+                  <g key={t.id}>
+                    <line x1={PAD.l} y1={y} x2={dims.w - PAD.r} y2={y}
+                      stroke={t.side === "BUY" ? "#0ECB81" : "#F6465D"} strokeDasharray="4 4" />
+                    <text x={dims.w - PAD.r + 4} y={y - 2} fill={t.side === "BUY" ? "#0ECB81" : "#F6465D"}
+                      fontSize={8} fontFamily="inherit">
+                      {t.side} {f2(t.price, 0)}
+                    </text>
+                  </g>
+                )
 
-})}
+              })}
               {/* ── EMA lines ── */}
               {activeIndicators.has("ema20") && (
                 <path clipPath="url(#ptcMain)"
@@ -873,7 +873,7 @@ return (
               })()}
 
 
-            
+
               {/* ════ MACD SUB-PANEL ═══════════════════════════════════════ */}
               {hasMACD && (() => {
                 const validH = macdV.hist.filter((v): v is number => v != null);
@@ -993,8 +993,8 @@ return (
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8 }}>
                 <span style={{ color: GREEN + "99" }}>B {fPrice(bestBid)}</span>
-                <span style={{ color: "#2a4060"    }}>SPR {fPrice(spread)}</span>
-                <span style={{ color: RED + "99"   }}>A {fPrice(bestAsk)}</span>
+                <span style={{ color: "#2a4060" }}>SPR {fPrice(spread)}</span>
+                <span style={{ color: RED + "99" }}>A {fPrice(bestAsk)}</span>
               </div>
             </div>
 
