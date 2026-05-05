@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type { WSMessage, Ticker, Bot, Trade, Signal } from "../types";
 
-const WS_BASE = "ws://cryptobotapi.onrender.com";
+const WS_BASE = "wss://cryptobotapi.onrender.com";
 //const WS_BASE = "wss://614a-102-207-163-35.ngrok-free.app";
 
 interface WSState {
