@@ -6,6 +6,7 @@ import { marketApi, tradesApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ProTradingChart1 from "../components/viewPro";
 import { S } from "./styles";
+import CandlestickChart from "../components/CandlestickChart";
 // ── Technical Analysis ────────────────────────────────────────────────────────
 function rsi(closes: number[], p = 14) {
   if (closes.length < p + 1) return 50;
@@ -90,6 +91,9 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
       clearInterval(interval);
     };
   }, [sel, iv]);
+
+// Then pass to chart:
+//<ProTradingChart candles={candles} loading={loading} symbol={sel} timeframe={iv} ... />
 
   const loadCandles = async (pair: string, interval: string) => {
     setCandles([])
@@ -257,9 +261,10 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
            <div style={S.card}>
   <div style={{ height: "100%" }}>
           <ProTradingChart1 candles={candles} trades={trades} symbol={sel} timeframe={iv} onTimeframeChange={(tf) => setIv(tf)} />
+           <CandlestickChart candles={candles} height={270} /> 
           </div>
           </div>
-         {/** <CandlestickChart candles={candles} height={270} /> 
+         {/**
          <div style={S.card}>
   <div style={{ height: "100%", width: "100%"}}>
   
