@@ -196,35 +196,25 @@ export default function ProTradingChart({
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
+// --- REMOVE THE MERGING LOGIC HERE ---
+// Simply use the 'candles' passed from props
+const lastClose = candles[candles.length - 1]?.close;
 
-  // ── Merge new candles by timestamp (FIX: don't blindly append) ───────────
-  const mergedCandles = useMemo(() => {
-    const prev = prevCandlesRef.current;
-    if (!prev.length) return candles;
-    // Build a map from existing candles
-    const map = new Map<number, OHLCV>(prev.map(c => [c.time, c]));
-    // Upsert new candles
-    for (const c of candles) map.set(c.time, c);
-    // Sort by time
-    return Array.from(map.values()).sort((a, b) => a.time - b.time);
-  }, [candles]);
+// Keep visual-only effects
+const prevLen = useRef(candles.length);
+useEffect(() => {
+  // Auto-scroll to newest when a new candle is added
+  if (candles.length > prevLen.current) {
+    setOffset(o => (o <= 5 ? 0 : o));
+  }
+  prevLen.current = candles.length;
+}, [candles.length]);
 
-    // Keep prevCandlesRef in sync
-    useEffect(() => { prevCandlesRef.current = mergedCandles; }, [mergedCandles]);
-  // Auto-scroll to newest when new candle arrives (only if near right edge)
-  const prevLen = useRef(mergedCandles.length);
-  useEffect(() => {
-    if (mergedCandles.length > prevLen.current) {
-      prevLen.current = mergedCandles.length;
-      setOffset(o => (o <= 5 ? 0 : o));
-    }
-  }, [mergedCandles.length]);
+// Keep mock order-book updates if they depend on the price
+useEffect(() => {
+  if (lastClose != null) setOrderBook(mockOrderBook(lastClose));
+}, [lastClose]);
 
-  // Refresh order-book whenever last price changes
-  const lastClose = candles[candles.length - 1]?.close;
-  useEffect(() => {
-    if (lastClose != null) setOrderBook(mockOrderBook(lastClose));
-  }, [lastClose]);
 
   // ── Derived geometry ─────────────────────────────────────────────────────────
   const hasRSI = activeIndicators.has("rsi");
@@ -234,17 +224,17 @@ export default function ProTradingChart({
   const W = dims.w - PAD.l - PAD.r;
 
   const visibleCount = Math.max(1, Math.floor(W / (candleW + CANDLE_GAP)));
-  const sliceEnd = Math.min(mergedCandles.length, Math.max(visibleCount, mergedCandles.length - offset));
+  const sliceEnd = Math.min(candles.length, Math.max(visibleCount, candles.length - offset));
   const sliceStart = Math.max(0, sliceEnd - visibleCount);
-  const slice = mergedCandles.slice(sliceStart, sliceEnd);
+  const slice = candles.slice(sliceStart, sliceEnd);
 
   const minP = useMemo(() => (slice.length ? Math.min(...slice.map(c => c.low)) : 0), [slice]);
   const maxP = useMemo(() => (slice.length ? Math.max(...slice.map(c => c.high)) : 1), [slice]);
   const range = maxP - minP || 1;
 
-  const hi24 = useMemo(() => (mergedCandles.length ? Math.max(...mergedCandles.slice(-288).map(c => c.high)) : 0), [mergedCandles]);
-  const lo24 = useMemo(() => (mergedCandles.length ? Math.min(...mergedCandles.slice(-288).map(c => c.low)) : 0), [mergedCandles]);
-  const vol24 = useMemo(() => mergedCandles.slice(-288).reduce((a, c) => a + c.volume, 0), [mergedCandles]);
+  const hi24 = useMemo(() => (candles.length ? Math.max(...candles.slice(-288).map(c => c.high)) : 0), [candles]);
+  const lo24 = useMemo(() => (candles.length ? Math.min(...candles.slice(-288).map(c => c.low)) : 0), [candles]);
+  const vol24 = useMemo(() => candles.slice(-288).reduce((a, c) => a + c.volume, 0), [candles]);
 
   const toY = useCallback((v: number): number => PAD.t + mainH - ((v - minP) / range) * mainH, [mainH, minP, range]);
   const toX = useCallback((i: number): number => PAD.l + i * (candleW + CANDLE_GAP) + candleW / 2, [candleW]);
@@ -260,8 +250,8 @@ export default function ProTradingChart({
   const maxVol = useMemo(() => (slice.length ? Math.max(...slice.map(c => c.volume)) : 1), [slice]);
 
   // ── Price info ────────────────────────────────────────────────────────────────
-  const lastCandle = mergedCandles[mergedCandles.length - 1] as OHLCV | undefined;
-  const prevCandle = mergedCandles[mergedCandles.length - 2] as OHLCV | undefined;
+  const lastCandle = candles[candles.length - 1] as OHLCV | undefined;
+  const prevCandle = candles[candles.length - 2] as OHLCV | undefined;
   const priceDelta = lastCandle && prevCandle ? lastCandle.close - prevCandle.close : 0;
   const pricePct = prevCandle ? (priceDelta / prevCandle.close) * 100 : 0;
   const isBull = priceDelta >= 0;
@@ -289,11 +279,11 @@ export default function ProTradingChart({
     } else {
       // Pan
       setOffset(o => Math.max(0, Math.min(
-        mergedCandles.length - visibleCount,
+        candles.length - visibleCount,
         o + Math.sign(e.deltaY) * Math.max(1, Math.ceil(visibleCount * 0.12))
       )));
     }
-  }, [mergedCandles.length, visibleCount]);
+  }, [candles.length, visibleCount]);
 
   useEffect(() => {
     const el = svgRef.current;
@@ -329,11 +319,11 @@ export default function ProTradingChart({
       const delta = e.touches[0].clientX - lastTouchX.current;
       const step  = Math.round(delta / (candleW + CANDLE_GAP));
       if (step !== 0) {
-        setOffset(o => Math.max(0, Math.min(mergedCandles.length - visibleCount, o - step)));
+        setOffset(o => Math.max(0, Math.min(candles.length - visibleCount, o - step)));
         lastTouchX.current = e.touches[0].clientX;
       }
     }
-  }, [candleW, mergedCandles.length, visibleCount]);
+  }, [candleW, candles.length, visibleCount]);
 
   const handleTouchEnd = useCallback(() => {
     lastTouchDist.current = null;
@@ -352,7 +342,7 @@ export default function ProTradingChart({
       const delta = mx - dragStartX.current;
       const step  = Math.round(delta / (candleW + CANDLE_GAP));
       if (step !== 0) {
-        setOffset(Math.max(0, Math.min(mergedCandles.length - visibleCount, dragStartOff.current - step)));
+        setOffset(Math.max(0, Math.min(candles.length - visibleCount, dragStartOff.current - step)));
       }
     }
 
@@ -366,7 +356,7 @@ export default function ProTradingChart({
       setCrosshair(null);
       setHovered(null);
     }
-  }, [isDragging, candleW, slice, minP, range, mainH, mergedCandles.length, visibleCount]);
+  }, [isDragging, candleW, slice, minP, range, mainH, candles.length, visibleCount]);
 
   const toggleIndicator = (id: IndicatorId): void =>
     setActiveIndicators(prev => {
@@ -557,7 +547,7 @@ export default function ProTradingChart({
          onTouchStart={handleTouchStart}
          onTouchMove={handleTouchMove}
          onTouchEnd={handleTouchEnd}>
-          {mergedCandles.length === 0 ? (
+          {candles.length === 0 ? (
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center", color: "#1a3050", gap: 10,
