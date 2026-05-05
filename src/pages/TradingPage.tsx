@@ -51,50 +51,60 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
   const ticker = tickers.find(t => t.symbol === sel);
   const ts = (t: typeof trades[0]) => t.created_at ? t.created_at * 1000 : t.timestamp || 0;
    // 1. Initial Load (REST)
-  useEffect(() => {
-  let cancelled = false;
+ useWebSocket(auth.token, {
+  onKline: (updates) => {
+    setCandles(prev => {
+      const normalize = (t: number) => t < 1e12 ? t * 1000 : t;
 
-  const loadData = async () => {
-    try {
-      // 1. Initial Load
-      const initialData = await marketApi.klines(sel, iv, 100);
-      if (!cancelled) setCandles(initialData);
+      const map = new Map(prev.map(c => [c.time, c]));
 
-      // 2. Start Polling (or handle via WebSocket if preferred)
-      const interval = setInterval(async () => {
-        const updates = await marketApi.klines(sel, iv, 5); // Fetch last few
-        
-        if (!cancelled && updates.length) {
-      setCandles(prev => {
-  const map = new Map(prev.map(c => [c.time, c]));
-  let changed = false;
+      updates.forEach(k => {
+        const t = normalize(k.time);
 
-  updates.forEach(upd => {
-    if (!map.has(upd.time) || JSON.stringify(map.get(upd.time)) !== JSON.stringify(upd)) {
-      map.set(upd.time, upd);
-      changed = true;
-    }
+        map.set(t, {
+          time: t,
+          open: k.open,
+          high: k.high,
+          low: k.low,
+          close: k.close,
+          volume: k.volume
+        });
+      });
+
+      return Array
+        .from(map.values())
+        .sort((a, b) => a.time - b.time)
+        .slice(-100);
+    });
+  }
+});
+const handlers = {
+ 
+  onKline: (data: KlineUpdate[]) => {
+    setCandles(prev => [...prev, ...data]);
+  },
+
+  onInit: (data: any) => {
+  }
+};
+const { send } = useWebSocket(auth.token, { ...handlers });
+useEffect(() => {
+  if (!auth.token) return;
+
+  send({
+    type: "SUBSCRIBE_KLINE",
+    symbol: sel,
+    interval: iv
   });
 
-  if (!changed) return prev;
-
-  return Array.from(map.values())
-    .sort((a, b) => a.time - b.time)
-    .slice(-100);
-});
-        }
-      }, 5000); // Poll every 5s for snappy updates
-
-      return () => clearInterval(interval);
-    } catch (err) {
-      console.error("Chart sync failed", err);
-    }
+  return () => {
+    send({
+      type: "UNSUBSCRIBE_KLINE",
+      symbol: sel,
+      interval: iv
+    });
   };
-
-  loadData();
-  return () => { cancelled = true; };
 }, [sel, iv]);
-
 
   /*
   useEffect(() => {

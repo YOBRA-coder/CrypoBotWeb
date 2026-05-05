@@ -108,6 +108,7 @@ export interface BacktestResult {
 }
 // In your types file
 export type KlineUpdate = {
+  
   time: number;
   open: number;
   high: number;
