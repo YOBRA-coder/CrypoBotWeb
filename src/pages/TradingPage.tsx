@@ -51,6 +51,7 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
   const ticker = tickers.find(t => t.symbol === sel);
   const ts = (t: typeof trades[0]) => t.created_at ? t.created_at * 1000 : t.timestamp || 0;
    // 1. Initial Load (REST)
+     /*
  useWebSocket(auth.token, {
   onKline: (updates) => {
     setCandles(prev => {
@@ -105,8 +106,8 @@ useEffect(() => {
     });
   };
 }, [sel, iv]);
+*/
 
-  /*
   useEffect(() => {
     let cancelled = false;
   
@@ -149,7 +150,7 @@ useEffect(() => {
       clearInterval(interval);
     };
   }, [sel, iv]);
-*/
+
 // Then pass to chart:
 //<ProTradingChart candles={candles} loading={loading} symbol={sel} timeframe={iv} ... />
 
