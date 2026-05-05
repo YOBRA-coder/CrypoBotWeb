@@ -61,23 +61,29 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
 
   // 2. Real-time updates via your existing hook
   const { send } = useWebSocket(auth.token, {
-onKline: (updates: KlineUpdate[]) => { 
+onKline: (updates: KlineUpdate[]) => {
   setCandles(prev => {
-    // 1. Create the map from previous candles
-    const map = new Map<number, KlineUpdate>(prev.map(c => [c.time, c]));
+    // Clone previous state to avoid direct mutation
+    const newCandles = [...prev];
 
-    // 2. Loop through the array of updates and add each one to the map
-    updates.forEach((candle) => {
-      // Access 'time' on the individual 'candle', not the 'updates' array
-      map.set(candle.time, candle); 
+    updates.forEach(update => {
+      const lastIndex = newCandles.length - 1;
+      
+      // Check if this update belongs to the last existing candle
+      if (lastIndex >= 0 && newCandles[lastIndex].time === update.time) {
+        // UPDATE existing candle (same hour)
+        newCandles[lastIndex] = update;
+      } else if (lastIndex < 0 || update.time > newCandles[lastIndex].time) {
+        // APPEND new candle (new hour started)
+        newCandles.push(update);
+      }
     });
 
-    // 3. Convert back to sorted array
-    return Array.from(map.values())
-      .sort((a, b) => a.time - b.time)
-      .slice(-100);
+    // Keep only the most recent 100 to maintain performance
+    return newCandles.slice(-100);
   });
 }
+
 
   });
 
