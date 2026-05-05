@@ -52,44 +52,50 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
   const ts = (t: typeof trades[0]) => t.created_at ? t.created_at * 1000 : t.timestamp || 0;
    // 1. Initial Load (REST)
   useEffect(() => {
-    let cancelled = false;
-    marketApi.klines(sel, iv, 100).then(data => {
-      if (!cancelled) setCandles(data);
-    });
-    return () => { cancelled = true; };
-  }, [sel, iv]);
+  let cancelled = false;
 
-  // 2. Real-time updates via your existing hook
-  const { send } = useWebSocket(auth.token, {
-onKline: (updates: KlineUpdate[]) => {
-  setCandles(prev => {
-    // Clone previous state to avoid direct mutation
-    const newCandles = [...prev];
+  const loadData = async () => {
+    try {
+      // 1. Initial Load
+      const initialData = await marketApi.klines(sel, iv, 100);
+      if (!cancelled) setCandles(initialData);
 
-    updates.forEach(update => {
-      const lastIndex = newCandles.length - 1;
-      
-      // Check if this update belongs to the last existing candle
-      if (lastIndex >= 0 && newCandles[lastIndex].time === update.time) {
-        // UPDATE existing candle (same hour)
-        newCandles[lastIndex] = update;
-      } else if (lastIndex < 0 || update.time > newCandles[lastIndex].time) {
-        // APPEND new candle (new hour started)
-        newCandles.push(update);
-      }
-    });
+      // 2. Start Polling (or handle via WebSocket if preferred)
+      const interval = setInterval(async () => {
+        const updates = await marketApi.klines(sel, iv, 5); // Fetch last few
+        
+        if (!cancelled && updates.length) {
+          setCandles(prev => {
+            const next = [...prev];
+            
+            updates.forEach(upd => {
+              const lastIdx = next.length - 1;
+              
+              // IF timestamps match: Update the current "forming" candle
+              if (lastIdx >= 0 && next[lastIdx].time === upd.time) {
+                next[lastIdx] = upd;
+              } 
+              // IF timestamp is newer: Append a new candle
+              else if (lastIdx < 0 || upd.time > next[lastIdx].time) {
+                next.push(upd);
+              }
+            });
 
-    // Keep only the most recent 100 to maintain performance
-    return newCandles.slice(-100);
-  });
-}
+            return next.slice(-100);
+          });
+        }
+      }, 5000); // Poll every 5s for snappy updates
 
+      return () => clearInterval(interval);
+    } catch (err) {
+      console.error("Chart sync failed", err);
+    }
+  };
 
-  });
+  loadData();
+  return () => { cancelled = true; };
+}, [sel, iv]);
 
-   useEffect(() => {
-    send({ type: "SUBSCRIBE_KLINES", symbol: sel, interval: iv });
-  }, [sel, iv, send]);
 
   /*
   useEffect(() => {

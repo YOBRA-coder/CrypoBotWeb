@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useWebSocket } from "./hooks/useWebSocket";
-import type { Ticker, Bot, Trade, Signal, Strategy, Page } from "./types";
+import type { Ticker, Bot, Trade, Signal, Strategy, Page, KlineUpdate } from "./types";
 import { PAIR_DISPLAY } from "./types";
 import { marketApi, signalsApi, botsApi, tradesApi, strategiesApi } from "./api/client";
 
@@ -67,6 +67,7 @@ function MainShell() {
 
   // State fed from both HTTP init and WebSocket updates
   const [tickers, setTickers] = useState<Ticker[]>([]);
+  const [Klines, setKlines] = useState<KlineUpdate[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
