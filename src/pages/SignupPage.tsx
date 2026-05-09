@@ -2,8 +2,10 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { S, authBg } from "./styles";
+import { useNavigate } from "react-router-dom";
 
-export default function SignupPage({ onSwitch }: { onSwitch: () => void }) {
+export default function SignupPage() {
+  const navigate = useNavigate();
   const { signup } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export default function SignupPage({ onSwitch }: { onSwitch: () => void }) {
         {error && <div style={S.err}>{error}</div>}
         <button style={S.btn} onClick={handle} disabled={loading}>{loading ? "Creating..." : "Create Account →"}</button>
         <div style={{ textAlign: "center", marginTop: 18, color: "#2e4060", fontSize: 11 }}>
-          Have account? <span style={{ color: "#00d084", cursor: "pointer" }} onClick={onSwitch}>Sign in</span>
+          Have account? <span style={{ color: "#00d084", cursor: "pointer" }} onClick={()=> navigate("/login")}>Sign in</span>
         </div>
       </div>
     </div>

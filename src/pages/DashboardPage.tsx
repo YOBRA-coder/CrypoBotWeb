@@ -2,12 +2,25 @@
 import type { PageProps } from "./shared";
 import { PAIR_DISPLAY } from "../types";
 import { S } from "./styles";
+import { useEffect, useState } from "react";
+import { useNavigate } from 'react-router-dom';
 
 export default function DashboardPage({ tickers, signals, bots, trades }: PageProps) {
+  const navigate = useNavigate();
   const totalProfit = bots.reduce((s, b) => s + b.profit, 0);
   const activeBots = bots.filter(b => b.status === "RUNNING").length;
   const activeSignals = signals.filter(s => s.status === "ACTIVE").length;
   const todayTrades = trades.filter(t => Date.now() - ((t.created_at || 0) * 1000 || t.timestamp || 0) < 86400000).length;
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+
+    useEffect(() => {
+      const onResize = () => {
+        setIsMobile(window.innerWidth < 768);
+      };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, []);
 
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
@@ -26,13 +39,33 @@ export default function DashboardPage({ tickers, signals, bots, trades }: PagePr
           </div>
         ))}
       </div>
+      {isMobile && (
+      <div style={{ display: "flex", gap: 9, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <button style={{ ...S.btnO, width: "auto", padding: "9px 18px" }} onClick={() => navigate('/strategy')} >
+          {"⏳ Strategies"}
+        </button>
+         <button style={{ ...S.btnO, width: "auto", padding: "9px 18px" }} onClick={() => navigate('/history')} >
+          {"⏳ History"}
+        </button>
+         <button style={{ ...S.btnO, width: "auto", padding: "9px 18px" }} onClick={() => navigate('/bots')} >
+          {"⏳ Bots"}
+        </button>
+         <button style={{ ...S.btnO, width: "auto", padding: "9px 18px" }} onClick={() => navigate('/signals')} >
+          {"⏳ Signals"}
+        </button>
+         <button style={{ ...S.btnO, width: "auto", padding: "9px 18px" }} onClick={() => navigate('/settings')} >
+          {"⏳ Settings"}
+        </button>
+
+        </div>
+      )}  
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         {/* Live prices */}
         <div style={S.card}>
           <div style={S.ch}>Live Prices</div>
           {tickers.slice(0, 8).map(t => (
-            <div key={t.symbol} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #0a1828" }}>
+            <div key={t.symbol} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #0a1828",cursor: "pointer" }} onClick={() => navigate('/trading?pair=' + t.symbol)}>
               <div>
                 <span style={{ color: "#e0eaf5", fontWeight: 700, fontSize: 12 }}>{PAIR_DISPLAY[t.symbol] || t.symbol}</span>
                 <span style={{ color: "#2e4060", fontSize: 9, marginLeft: 8 }}>{(t.volume24h / 1e6).toFixed(1)}M</span>
@@ -46,11 +79,11 @@ export default function DashboardPage({ tickers, signals, bots, trades }: PagePr
           {tickers.length === 0 && <div style={{ color: "#2e4060", fontSize: 11, padding: 16, textAlign: "center" }}>Connecting to market data...</div>}
         </div>
 
-        {/* Bot performance */}
+          {/* Bot performance */}
         <div style={S.card}>
           <div style={S.ch}>Bot Performance</div>
           {bots.map(bot => (
-            <div key={bot.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #0a1828" }}>
+            <div key={bot.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #0a1828", cursor: "pointer" }} onClick={() => navigate(`/bot/${bot.id}`)}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: bot.status === "RUNNING" ? "#00d084" : bot.status === "PAUSED" ? "#ffd700" : "#2e4060", flexShrink: 0 }} />
                 <div>
@@ -66,6 +99,7 @@ export default function DashboardPage({ tickers, signals, bots, trades }: PagePr
           ))}
           {bots.length === 0 && <div style={{ color: "#2e4060", fontSize: 11, padding: 16, textAlign: "center" }}>No bots yet — create in Bots tab</div>}
         </div>
+
       </div>
 
       {/* Signals */}
@@ -79,7 +113,7 @@ export default function DashboardPage({ tickers, signals, bots, trades }: PagePr
               const tp = s.target_price ?? s.targetPrice ?? s.price;
               const sl = s.stop_loss ?? s.stopLoss ?? s.price;
               return (
-                <div key={s.id} style={{ background: "#0c1420", border: `1px solid ${s.type === "BUY" ? "#00d08444" : s.type === "SELL" ? "#ff475744" : "#ffd70044"}`, borderRadius: 10, padding: 13 }}>
+                <div key={s.id} style={{ background: "#0c1420", border: `1px solid ${s.type === "BUY" ? "#00d08444" : s.type === "SELL" ? "#ff475744" : "#ffd70044"}`, borderRadius: 10, padding: 13, cursor: "pointer" }}  onClick={() => navigate('/trading?pair=' + s.pair)}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontWeight: 800, color: "#e0eaf5", fontSize: 13 }}>{PAIR_DISPLAY[s.pair] || s.pair}</span>

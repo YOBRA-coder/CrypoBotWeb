@@ -1,13 +1,14 @@
 // pages/TradingPage.tsx
 import { useState, useEffect } from "react";
 import type { PageProps } from "./shared";
-import { KlineUpdate, PAIR_DISPLAY, PAIRS, type OHLCV } from "../types";
+import { KlineUpdate, PAIR_DISPLAY, PAIRS, Trade, type OHLCV } from "../types";
 import { marketApi, tradesApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ProTradingChart1 from "../components/viewPro";
 import { S } from "./styles";
-import CandlestickChart from "../components/CandlestickChart";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useLocation } from "react-router-dom";
+import TradeModal from "../components/TradeModal";
+
 // ── Technical Analysis ────────────────────────────────────────────────────────
 function rsi(closes: number[], p = 14) {
   if (closes.length < p + 1) return 50;
@@ -37,8 +38,10 @@ function bb(closes: number[], p = 20) {
 }
 
 export default function TradingPage({ tickers, trades, setTrades, notify }: PageProps) {
+  const location = useLocation();
+  const pair = new URLSearchParams(location.search).get("pair");
   const { auth } = useAuth();
-  const [sel, setSel] = useState("BTCUSDT");
+  const [sel, setSel] = useState(pair ? pair : "BTCUSDT");
   const [candles, setCandles] = useState<OHLCV[]>([]);
   const [iv, setIv] = useState("1h");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -50,67 +53,56 @@ export default function TradingPage({ tickers, trades, setTrades, notify }: Page
   const [aiLoading, setAiLoading] = useState(false);
   const ticker = tickers.find(t => t.symbol === sel);
   const ts = (t: typeof trades[0]) => t.created_at ? t.created_at * 1000 : t.timestamp || 0;
-   // 1. Initial Load (REST)
-     /*
- useWebSocket(auth.token, {
-  onKline: (updates) => {
-    setCandles(prev => {
-      const normalize = (t: number) => t < 1e12 ? t * 1000 : t;
+  // 1. Initial Load (REST)
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [showPrices, setShowPrices] = useState(isMobile ? false : true);
+  const [showPairsModal, setShowPairsModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const totalPages = Math.ceil(trades.length / pageSize);
+  const paginated = trades.slice((page - 1) * pageSize, page * pageSize);
+  const [editing, setEditing] = useState<any | null>(null);
+   useEffect(() => {
+    setPage(1);
+  }, [trades]);
 
-      const map = new Map(prev.map(c => [c.time, c]));
+  const getPages = () => {
+    const pages: number[] = [];
 
-      updates.forEach(k => {
-        const t = normalize(k.time);
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, page + 2);
 
-        map.set(t, {
-          time: t,
-          open: k.open,
-          high: k.high,
-          low: k.low,
-          close: k.close,
-          volume: k.volume
-        });
-      });
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
 
-      return Array
-        .from(map.values())
-        .sort((a, b) => a.time - b.time)
-        .slice(-100);
-    });
-  }
-});
-const handlers = {
- 
-  onKline: (data: KlineUpdate[]) => {
-    setCandles(prev => [...prev, ...data]);
-  },
-
-  onInit: (data: any) => {
-  }
-};
-const { send } = useWebSocket(auth.token, { ...handlers });
-useEffect(() => {
-  if (!auth.token) return;
-
-  send({
-    type: "SUBSCRIBE_KLINE",
-    symbol: sel,
-    interval: iv
-  });
-
-  return () => {
-    send({
-      type: "UNSUBSCRIBE_KLINE",
-      symbol: sel,
-      interval: iv
-    });
+    return pages;
   };
-}, [sel, iv]);
-*/
+useEffect(() => {
+  const onResize = () => {
+    const mobile = window.innerWidth < 992;
+
+    setIsMobile(mobile);
+
+    if (!mobile) {
+      setShowPrices(true);
+      setShowPairsModal(false);
+    } else {
+      setShowPrices(false);
+    }
+  };
+
+  onResize();
+
+  window.addEventListener("resize", onResize);
+
+  return () => window.removeEventListener("resize", onResize);
+}, []);
 
   useEffect(() => {
     let cancelled = false;
-  
+
     const loadInitial = async () => {
       try {
         const data = await marketApi.klines(sel, iv, 100);
@@ -119,17 +111,17 @@ useEffect(() => {
         console.error("Failed to load candles", err);
       }
     };
-  
+
     const pollUpdates = async () => {
       try {
         const updates = await marketApi.klines(sel, iv, 3);
-  
+
         if (!cancelled && updates.length) {
           setCandles(prev => {
             const map = new Map(prev.map(c => [c.time, c]));
-  
+
             updates.forEach(c => map.set(c.time, c));
-  
+
             return Array
               .from(map.values())
               .sort((a, b) => a.time - b.time)
@@ -140,19 +132,19 @@ useEffect(() => {
         console.error("Candle update failed", err);
       }
     };
-  
+
     loadInitial();
-  
+
     const interval = setInterval(pollUpdates, 15000);
-  
+
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
   }, [sel, iv]);
 
-// Then pass to chart:
-//<ProTradingChart candles={candles} loading={loading} symbol={sel} timeframe={iv} ... />
+  // Then pass to chart:
+  //<ProTradingChart candles={candles} loading={loading} symbol={sel} timeframe={iv} ... />
 
   const loadCandles = async (pair: string, interval: string) => {
     setCandles([])
@@ -160,83 +152,59 @@ useEffect(() => {
     setTimeout(() => {
       setCandles(data);
     }, 1000);
-    
+
   };
-
-
-
-/*
   useEffect(() => {
-    let alive = true;
-    setCandles([]);
-    marketApi.klines(sel, iv, 100).then(d => { if (alive) setCandles(d); });
-    const id = setInterval(() => marketApi.klines(sel, iv, 3).then(d => {
-      if (alive && d.length) setCandles(prev => {
-        const map = new Map(prev.map(c => [c.time, c]))
-      
-        for (const c of d) {
-          map.set(c.time, c) // update existing or add new
-        }
-      
-        const merged = Array.from(map.values()).sort((a, b) => a.time - b.time)
-      
-        return merged.slice(-100)
-      })
-    }), 15000);
-    return () => { alive = false; clearInterval(id); };
-  }, [sel, iv]);
-*/
-  useEffect(()=>{
 
-    const price = candles[candles.length-1]?.close
-    if(!price) return
-  
+    const price = candles[candles.length - 1]?.close
+    if (!price) return
+
     setTrades(t =>
       t.map(trade => {
-  
-        if(trade.status !== "FILLED") return trade
-  
+
+        if (trade.status !== "FILLED") return trade
+
         const pnl =
           trade.side === "BUY"
-          ? (price - trade.price) * trade.amount
-          : (trade.price - price) * trade.amount
+            ? (price - trade.price) * trade.amount
+            : (trade.price - price) * trade.amount
 
-       
-        return {...trade, pnl}
+
+        return { ...trade, pnl }
       })
     )
-  
-  },[candles])
+
+  }, [candles])
 
   const closes = candles.map(c => c.close);
   const RSI = rsi(closes), MACD = macd(closes), BB = bb(closes);
   const fmt = (p: number) => p < 1 ? p.toFixed(4) : p < 10000 ? p.toFixed(2) : p.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
-  const closeTrade = (id:string) => {
+  const closeTrade = (id: string) => {
 
-    const price = candles[candles.length-1]?.close
-   
+    const price = candles[candles.length - 1]?.close
+
     setTrades(t =>
-     t.map(trade => {
-   
-      if(trade.id !== id) return trade
-   
-      const pnl =
-       trade.side === "BUY"
-        ? (price - trade.price) * trade.amount
-        : (trade.price - price) * trade.amount
-   
-      return {
-        ...trade,
-        status:"CANCELLED",
-        closePrice: price,
-        pnl
-      }
-   
-     })
+      t.map(trade => {
+
+        if (trade.id !== id) return trade
+
+        const pnl =
+          trade.side === "BUY"
+            ? (price - trade.price) * trade.amount
+            : (trade.price - price) * trade.amount
+
+        return {
+          ...trade,
+          status: "CANCELLED",
+          closePrice: price,
+          pnl
+        }
+
+      })
     )
-   
-   }
+
+  }
 
   const handleOrder = async () => {
     if (!auth.token) return;
@@ -276,165 +244,597 @@ useEffect(() => {
     setAiLoading(false);
   };
 
+  function renderOrderPanel() {
+    return (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Order</div>
+        {ticker && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 13 }}>
+            {[{ l: "BID", v: "$" + fmt(ticker.bid), c: "#00d084" }, { l: "ASK", v: "$" + fmt(ticker.ask), c: "#ff4757" },
+            { l: "HIGH", v: "$" + fmt(ticker.high24h), c: "#e0eaf5" }, { l: "LOW", v: "$" + fmt(ticker.low24h), c: "#e0eaf5" }].map(s => (
+              <div key={s.l} style={{ background: "#040a12", border: "1px solid #0a1828", borderRadius: 7, padding: "7px 9px" }}>
+                <div style={{ color: "#2e4060", fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>{s.l}</div>
+                <div style={{ color: s.c, fontWeight: 700, fontSize: 11, marginTop: 1 }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
+          {(["BUY", "SELL"] as const).map(s => (
+            <button key={s} style={{ flex: 1, padding: 9, borderRadius: 7, cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "inherit", border: `1px solid ${side === s ? (s === "BUY" ? "#00d084" : "#ff4757") : "#0a1828"}`, background: side === s ? (s === "BUY" ? "#00d084" : "#ff4757") : "#0c1420", color: side === s ? "#000" : "#4a6080" }} onClick={() => setSide(s)}>{s}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 4, marginBottom: 11 }}>
+          {(["market", "limit"] as const).map(t => (
+            <div key={t} style={{ flex: 1, padding: "6px", borderRadius: 6, cursor: "pointer", background: orderType === t ? "#0094ff22" : "#0c1420", border: `1px solid ${orderType === t ? "#0094ff" : "#0a1828"}`, color: orderType === t ? "#0094ff" : "#4a6080", textAlign: "center", fontSize: 10 }} onClick={() => setOrderType(t)}>{t.charAt(0).toUpperCase() + t.slice(1)}</div>
+          ))}
+        </div>
+        <div style={S.fg}>
+          <label style={S.lbl}>Amount</label>
+          <input style={S.inp} value={amount} onChange={e => setAmount(e.target.value)} type="number" step="0.001" />
+        </div>
+        {orderType === "limit" && (
+          <div style={S.fg}>
+            <label style={S.lbl}>Limit Price</label>
+            <input style={S.inp} value={limitPrice} onChange={e => setLimitPrice(e.target.value)} type="number" placeholder={ticker?.price.toFixed(2)} />
+          </div>
+        )}
+        {ticker && <div style={{ color: "#2e4060", fontSize: 10, marginBottom: 10 }}>Total ≈ <span style={{ color: "#e0eaf5" }}>${(parseFloat(amount) * ticker.price || 0).toFixed(2)}</span></div>}
+        <button style={{ ...S.btn, background: side === "BUY" ? "#00d084" : "#ff4757", fontWeight: 800 }} onClick={handleOrder} disabled={loading}>
+          {loading ? "Processing..." : `${side} ${PAIR_DISPLAY[sel]}`}
+        </button>
+      </>
+    );
+  }
+
+  function renderTrades() {
+    return (
+      <>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Recent Trades</div>
+
+        <table style={{ width: "100%", fontSize: 12 }}>
+          <thead style={{ color: "#8b98a5" }}>
+            <tr>
+              <th>Pair</th>
+              <th>Side</th>
+              <th>Price</th>
+              <th>Amt</th>
+              <th>PnL</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {paginated.map(t => (
+              <tr key={t.id} onClick={() => setEditing(t)} style={{ background: editing?.id === t.id ? "#00d08411" : "transparent", cursor: "pointer" }}>
+                <td>{PAIR_DISPLAY[t.pair]}</td>
+                <td style={{ color: t.side === "BUY" ? "#00d084" : "#ff4757" }}>
+                  {t.side}
+                </td>
+                <td>{t.price.toFixed(2)}</td>
+                <td>{t.amount}</td>
+                <td style={{ color: (t.pnl || 0) >= 0 ? "#00d084" : "#ff4757" }}>
+                  {(t.pnl || 0).toFixed(2)}
+                </td>
+                <td>{t.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {totalPages > 1 && (
+            <div style={{
+              display: "flex",
+              gap: 6,
+              justifyContent: "center",
+              marginTop: 15,
+              alignItems: "center"
+            }}>
+
+              {/* Prev */}
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={S.btn}
+              >
+                Prev
+              </button>
+
+              {/* First page always */}
+              {page > 3 && (
+                <>
+                  <button style={S.btn} onClick={() => setPage(1)}>1</button>
+                  <span style={{ color: "#4a6080" }}>...</span>
+                </>
+              )}
+
+              {/* Middle pages */}
+              {getPages().map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  style={{
+                    ...S.btn,
+                    background: p === page ? "#00d084" : "#0c1420",
+                    color: p === page ? "#000" : "#e0eaf5",
+                    borderColor: p === page ? "#00d084" : "#0a1828"
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+
+              {/* Last page always */}
+              {page < totalPages - 2 && (
+                <>
+                  <span style={{ color: "#4a6080" }}>...</span>
+                  <button style={S.btn} onClick={() => setPage(totalPages)}>
+                    {totalPages}
+                  </button>
+                </>
+              )}
+
+              {/* Next */}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={S.btn}
+              >
+                Next
+              </button>
+
+            </div>
+          )}
+      </>
+    );
+  }
+
+
+ const styles = {
+  page: {
+    display: "flex",
+    flexDirection: "column" as const,
+    background: "#0a0e14",
+    minHeight: "100vh",
+    color: "#e6edf3",
+    padding: 10,
+    overflow: "hidden"
+  },
+
+  topBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap" as const,
+    padding: "12px 14px",
+    background: "#0f1520",
+    border: "1px solid #1a2233",
+    borderRadius: 10,
+    marginBottom: 10
+  },
+
+  symbol: {
+    fontWeight: 700,
+    fontSize: isMobile ? 13 : 15,
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    cursor: "pointer"
+  },
+
+  metrics: {
+    display: "flex",
+    gap: 14,
+    flexWrap: "wrap" as const,
+    fontSize: isMobile ? 10 : 12,
+    color: "#8b98a5"
+  },
+
+  grid: {
+    display: "flex",
+    flex: 1,
+    gap: 10,
+    width: "100%",
+    minHeight: 0,
+    overflow: "hidden"
+  },
+
+  leftPanel: {
+    width: 260,
+    minWidth: 240,
+    maxWidth: 280,
+    background: "#0f1520",
+    border: "1px solid #1a2233",
+    borderRadius: 10,
+    overflowY: "auto" as const,
+    padding: 8,
+    height: "calc(100vh - 170px)"
+  },
+
+  center: {
+    flex: 1,
+    minWidth: 0,
+    background: "#0f1520",
+    border: "1px solid #1a2233",
+    borderRadius: 10,
+    padding: isMobile ? 0 : 10,
+    display: "flex",
+    flexDirection: "column" as const,
+    overflow: "hidden",
+    height: "calc(100vh - 170px)"
+  },
+
+  rightPanel: {
+    width: isMobile ? "100%" : 320,
+    minWidth: isMobile ? "100%" : 300,
+    background: "#0f1520",
+    border: "1px solid #1a2233",
+    borderRadius: 10,
+    padding: 12,
+    overflowY: "auto" as const,
+    height: isMobile ? "auto" : "calc(100vh - 170px)"
+  },
+
+  bottom: {
+    marginTop: 10,
+    background: "#0f1520",
+    border: "1px solid #1a2233",
+    borderRadius: 10,
+    padding: 10,
+    overflowX: "auto" as const
+  },
+
+  pair: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px",
+    borderBottom: "1px solid #1a2233",
+    cursor: "pointer",
+    fontSize: 12,
+    borderRadius: 6
+  },
+
+  mobilePairsButton: {
+    position: "fixed" as const,
+    bottom: 20,
+    left: 20,
+    zIndex: 1000,
+    background: "#0094ff",
+    border: "none",
+    color: "#fff",
+    padding: "12px 16px",
+    borderRadius: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
+  },
+
+  mobileModal: {
+    position: "fixed" as const,
+    inset: 0,
+    background: "rgba(0,0,0,0.7)",
+    zIndex: 2000,
+    display: "flex",
+    justifyContent: "flex-start",
+    alignItems: "stretch"
+  },
+
+  mobileModalContent: {
+    width: 280,
+    background: "#0f1520",
+    borderRight: "1px solid #1a2233",
+    overflowY: "auto" as const,
+    padding: 10
+  }
+
+};
+const panel = {
+  width: 380,
+  background: "#0c1420",
+  border: "1px solid #0a1828",
+  borderRadius: 12,
+  padding: 16
+};
+
+const box = {
+  background: "#070d17",
+  border: "1px solid #0a1828",
+  padding: 10,
+  borderRadius: 8,
+  marginTop: 10,
+  fontSize: 12,
+  color: "#4a6080"
+};
+
+const value = {
+  color: "#e0eaf5",
+  fontWeight: 700,
+  fontSize: 14
+};
+
+const input = {
+  flex: 1,
+  padding: 8,
+  background: "#070d17",
+  border: "1px solid #0a1828",
+  borderRadius: 6,
+  width: "100%",
+  color: "#e0eaf5"
+};
+
+const primary = {
+  flex: 1,
+  padding: 10,
+  background: "#00d084",
+  border: 0,
+  borderRadius: 6,
+  fontWeight: 700
+};
+
+const danger = {
+  flex: 1,
+  padding: 10,
+  background: "#ff4757",
+  border: 0,
+  borderRadius: 6,
+  fontWeight: 700,
+  color: "#000"
+};
+
 
 
   return (
-    <div style={{ animation: "fadeUp .3s ease" }}>
-      {/* Pair selector */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        {tickers.map(t => (
-          <div key={t.symbol}
-            style={{ background: sel === t.symbol ? "#00d08411" : "#0c1420", border: `1px solid ${sel === t.symbol ? "#00d084" : "#0a1828"}`, borderRadius: 7, padding: "4px 9px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 1 }}
-            onClick={() => setSel(t.symbol)}>
-            <span style={{ color: "#e0eaf5", fontWeight: 700, fontSize: 10 }}>{PAIR_DISPLAY[t.symbol]}</span>
-            <span style={{ color: t.changePct >= 0 ? "#00d084" : "#ff4757", fontSize: 9 }}>{t.changePct >= 0 ? "▲" : "▼"}{Math.abs(t.changePct).toFixed(2)}%</span>
+    <>
+      <div style={styles.page}>
+
+        {/* TOP BAR */}
+        <div style={styles.topBar}>
+          <div style={styles.symbol} onClick={() => { isMobile ? setShowPairsModal(!showPairsModal) : setShowPrices(!showPrices);}}>
+            {PAIR_DISPLAY[sel]}
+            <span style={{ color: ticker?.changePct! >= 0 ? "#00d084" : "#ff4757", transition: "color 0.25s" }}>
+              {ticker?.price}
+            </span>
           </div>
-        ))}
+
+          <div style={styles.metrics}>
+            <span>RSI {RSI.toFixed(1)}</span>
+            <span>MACD {MACD.hist.toFixed(3)}</span>
+            <span>H {ticker?.high24h}</span>
+            <span>L {ticker?.low24h}</span>
+          </div>
+        </div>
+
+     <div
+  style={{
+    ...styles.grid,
+    flexDirection: isMobile ? "column" : "row"
+  }}
+>
+  {/* DESKTOP LEFT PANEL */}
+  {!isMobile && showPrices && (
+    <div style={styles.leftPanel}>
+      {tickers.map(t => (
+        <div
+          key={t.symbol}
+          onClick={() => setSel(t.symbol)}
+          style={styles.pair}
+        >
+          <div>{PAIR_DISPLAY[t.symbol]}</div>
+
+          <div
+            style={{
+              color: t.changePct >= 0 ? "#00d084" : "#ff4757"
+            }}
+          >
+            {t.changePct.toFixed(2)}%
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {/* CENTER CHART */}
+  <div style={styles.center}>
+    <ProTradingChart1
+      candles={candles}
+      trades={trades}
+      symbol={sel}
+      timeframe={iv}
+      onTimeframeChange={setIv}
+      onTradeClick={setSelectedTrade}
+    />
+
+    {selectedTrade && (
+      <TradeModal
+        trade={selectedTrade}
+        currentPrice={candles[candles.length - 1]?.close || 0}
+        onClose={() => setSelectedTrade(null)}
+        onUpdate={(updates: any) => {
+          setTrades(prev =>
+            prev.map(t =>
+              t.id === selectedTrade.id
+                ? { ...t, ...updates }
+                : t
+            )
+          )
+        }}
+      />
+    )}
+  </div>
+
+  {/* RIGHT PANEL */}
+  <div style={styles.rightPanel}>
+    {renderOrderPanel()}
+  </div>
+</div>
+{/* MOBILE PAIRS BUTTON */}
+{isMobile && (
+  <>
+    <button
+      style={styles.mobilePairsButton}
+      onClick={() => setShowPairsModal(true)}
+    >
+      Pairs
+    </button>
+
+    {showPairsModal && (
+      <div
+        style={styles.mobileModal}
+        onClick={() => setShowPairsModal(false)}
+      >
+        <div
+          style={styles.mobileModalContent}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {tickers.map(t => (
+            <div
+              key={t.symbol}
+              onClick={() => {
+                setSel(t.symbol);
+                setShowPairsModal(false);
+              }}
+              style={styles.pair}
+            >
+              <div>{PAIR_DISPLAY[t.symbol]}</div>
+
+              <div
+                style={{
+                  color:
+                    t.changePct >= 0
+                      ? "#00d084"
+                      : "#ff4757"
+                }}
+              >
+                {t.changePct.toFixed(2)}%
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </>
+)}
+         {/* BOTTOM: TRADES */}
+      <div style={styles.bottom}>
+        {renderTrades()}
+      </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-        {/* Chart */}
-        <div style={S.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ color: "#e0eaf5", fontWeight: 800, fontSize: 16 }}>{PAIR_DISPLAY[sel]}</span>
-              {ticker && <>
-                <span style={{ color: "#e0eaf5", fontSize: 18, fontWeight: 700 }}>${fmt(ticker.price)}</span>
-                <span style={{ color: ticker.changePct >= 0 ? "#00d084" : "#ff4757", fontSize: 12 }}>
-                  {ticker.changePct >= 0 ? "▲" : "▼"} {Math.abs(ticker.changePct).toFixed(2)}%
-                </span>
-              </>}
-            </div>
-            <div style={{ display: "flex", gap: 4 }}>
-              {["1m", "5m", "15m", "30m", "1h", "4h", "6h", "1d"].map(i => (
-                <div key={i} style={{ background: iv === i ? "#00d08422" : "#0c1420", border: `1px solid ${iv === i ? "#00d084" : "#0a1828"}`, color: iv === i ? "#00d084" : "#4a6080", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontSize: 10 }} onClick={() => {
-                  setCandles([]); // clear chart
-                  setIv(i);
-                }}>{i}</div>
-              ))}
-            </div>
-          </div>
+       {editing && (
+  <div style={{position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999}} onClick={() => setEditing(null)} >
+    
+    <div onClick={e => e.stopPropagation()} style={panel}>
 
-         {/** <CandlesStick candles={candles} height={300}/> 
-          * 
-          *
-         */}
-           <div style={S.card}>
-  <div style={{ height: "100%" }}>
-          <ProTradingChart1 candles={candles} trades={trades} symbol={sel} timeframe={iv} onTimeframeChange={(tf) => setIv(tf)} />
-           <CandlestickChart candles={candles} height={270} /> 
+      {/* HEADER */}
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ color: "#e0eaf5", fontWeight: 700 }}>
+            {editing.pair}
           </div>
-          </div>
-         {/**
-         <div style={S.card}>
-  <div style={{ height: "100%", width: "100%"}}>
-  
-<ProTradingChart candles={candles}/>
-    </div>
-  </div>*/}
-                 
-
-          {/* Indicators */}
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            {[
-              { l: "RSI(14)", v: RSI.toFixed(1), c: RSI < 30 ? "#00d084" : RSI > 70 ? "#ff4757" : "#e0eaf5" },
-              { l: "MACD", v: MACD.hist.toFixed(5), c: MACD.hist >= 0 ? "#00d084" : "#ff4757" },
-              { l: "BB↑", v: fmt(BB.upper), c: "#4a6080" },
-              { l: "BB↓", v: fmt(BB.lower), c: "#4a6080" },
-              ...(ticker ? [
-                { l: "High", v: "$" + fmt(ticker.high24h), c: "#00d084" },
-                { l: "Low", v: "$" + fmt(ticker.low24h), c: "#ff4757" },
-              ] : []),
-            ].map(ind => (
-              <div key={ind.l} style={{ display: "flex", gap: 4, alignItems: "center", background: "#060c14", border: "1px solid #0a1828", borderRadius: 5, padding: "4px 8px" }}>
-                <span style={{ color: "#2e4060", fontSize: 9 }}>{ind.l}</span>
-                <span style={{ color: ind.c, fontWeight: 700, fontSize: 10 }}>{ind.v}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* AI Analysis */}
-          <div style={{ marginTop: 12 }}>
-            <button style={{ ...S.btnO, fontSize: 11, marginBottom: 9 }} onClick={()=>handleAI} disabled={aiLoading}>
-              {aiLoading ? "⏳ Analyzing..." : "🤖 AI Analysis"}
-            </button>
-            {aiText && (
-              <div style={{ background: "#040a12", border: "1px solid #00d08433", borderRadius: 9, padding: 13 }}>
-                <div style={{ color: "#00d084", fontWeight: 700, fontSize: 9, marginBottom: 7, letterSpacing: 2 }}>AI ANALYSIS</div>
-                <div style={{ color: "#8090a8", fontSize: 11, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>
-              </div>
-            )}
+          <div style={{ color: "#4a6080", fontSize: 11 }}>
+            {editing.bot_id ? "Bot Trade" : "Manual Trade"}
           </div>
         </div>
 
-        {/* Order Panel */}
-        <div style={S.card}>
-          <div style={S.ch}>Place Order</div>
-          {ticker && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 13 }}>
-              {[{ l: "BID", v: "$" + fmt(ticker.bid), c: "#00d084" }, { l: "ASK", v: "$" + fmt(ticker.ask), c: "#ff4757" },
-              { l: "HIGH", v: "$" + fmt(ticker.high24h), c: "#e0eaf5" }, { l: "LOW", v: "$" + fmt(ticker.low24h), c: "#e0eaf5" }].map(s => (
-                <div key={s.l} style={{ background: "#040a12", border: "1px solid #0a1828", borderRadius: 7, padding: "7px 9px" }}>
-                  <div style={{ color: "#2e4060", fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>{s.l}</div>
-                  <div style={{ color: s.c, fontWeight: 700, fontSize: 11, marginTop: 1 }}>{s.v}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
-            {(["BUY", "SELL"] as const).map(s => (
-              <button key={s} style={{ flex: 1, padding: 9, borderRadius: 7, cursor: "pointer", fontWeight: 800, fontSize: 12, fontFamily: "inherit", border: `1px solid ${side === s ? (s === "BUY" ? "#00d084" : "#ff4757") : "#0a1828"}`, background: side === s ? (s === "BUY" ? "#00d084" : "#ff4757") : "#0c1420", color: side === s ? "#000" : "#4a6080" }} onClick={() => setSide(s)}>{s}</button>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 4, marginBottom: 11 }}>
-            {(["market", "limit"] as const).map(t => (
-              <div key={t} style={{ flex: 1, padding: "6px", borderRadius: 6, cursor: "pointer", background: orderType === t ? "#0094ff22" : "#0c1420", border: `1px solid ${orderType === t ? "#0094ff" : "#0a1828"}`, color: orderType === t ? "#0094ff" : "#4a6080", textAlign: "center", fontSize: 10 }} onClick={() => setOrderType(t)}>{t.charAt(0).toUpperCase() + t.slice(1)}</div>
-            ))}
-          </div>
-          <div style={S.fg}>
-            <label style={S.lbl}>Amount</label>
-            <input style={S.inp} value={amount} onChange={e => setAmount(e.target.value)} type="number" step="0.001" />
-          </div>
-          {orderType === "limit" && (
-            <div style={S.fg}>
-              <label style={S.lbl}>Limit Price</label>
-              <input style={S.inp} value={limitPrice} onChange={e => setLimitPrice(e.target.value)} type="number" placeholder={ticker?.price.toFixed(2)} />
-            </div>
-          )}
-          {ticker && <div style={{ color: "#2e4060", fontSize: 10, marginBottom: 10 }}>Total ≈ <span style={{ color: "#e0eaf5" }}>${(parseFloat(amount) * ticker.price || 0).toFixed(2)}</span></div>}
-          <button style={{ ...S.btn, background: side === "BUY" ? "#00d084" : "#ff4757", fontWeight: 800 }} onClick={handleOrder} disabled={loading}>
-            {loading ? "Processing..." : `${side} ${PAIR_DISPLAY[sel]}`}
-          </button>
+        <div style={{
+          color: editing.status === "OPEN" ? "#00d084" : "#ff4757",
+          fontWeight: 700
+        }}>
+          {editing.status}
         </div>
-
-        <div style={S.card}>
-        <div style={S.ch}>Live Trades</div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>{["Pair", "Side", "Entry", "Amount", "P&L", "Source", "Status"].map(h => (
-                  <th key={h} style={{ color: "#2e4060", fontSize: 8, fontWeight: 700, letterSpacing: 1.5, padding: "7px 11px", textAlign: "left", borderBottom: "1px solid #0a1828", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {trades.map(t => (
-                  <tr key={t.id}>
-                    <td style={{ color: "#e0eaf5", fontWeight: 700, fontSize: 11, padding: "8px 11px" }}>{PAIR_DISPLAY[t.pair] || t.pair}</td>
-                    <td style={{ padding: "8px 11px" }}><span style={{ color: t.side === "BUY" ? "#00d084" : "#ff4757", fontWeight: 700, fontSize: 10 }}>{t.side}</span></td>
-                    <td style={{ color: "#8090a8", fontSize: 10, padding: "8px 11px", fontFamily: "monospace" }}>{t.price.toFixed(4)}</td>
-                    <td style={{ color: "#8090a8", fontSize: 10, padding: "8px 11px", fontFamily: "monospace" }}>{t.amount.toFixed(4)}</td>
-                    <td style={{ padding: "8px 11px" }}><span style={{ color: (t.pnl || 0) >= 0 ? "#00d084" : "#ff4757", fontSize: 10, fontWeight: 600, fontFamily: "monospace" }}>{(t.pnl || 0) >= 0 ? "+" : ""}${(t.pnl || 0).toFixed(4)}</span></td>
-                    <td style={{ color: "#2e4060", fontSize: 9, padding: "8px 11px" }}>{t.bot_id ? "Bot" : "Manual"}</td>
-                    <td style={{ color: "#2e4060", fontSize: 9, padding: "8px 11px" }}>{t.status}</td>
-                    <td style={{ color: "#2e4060", fontSize: 9, padding: "8px 11px" }}><button onClick={()=>closeTrade(t.id)}>Stop</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        
       </div>
+
+      {/* LIVE PRICE */}
+      <div style={box}>
+        <div>Live Price</div>
+        <div style={value}>
+          ${ticker?.price?.toFixed(4) || "—"}
+        </div>
+      </div>
+
+      {/* ENTRY */}
+      <div style={box}>
+        <div>Entry Price</div>
+        <div style={value}>
+          ${editing.price.toFixed(4)}
+        </div>
+      </div>
+
+      {/* PNL */}
+      <div style={box}>
+        <div>Unrealized P&L</div>
+        <div style={{
+          ...value,
+          color: (editing.pnl || 0) >= 0 ? "#00d084" : "#ff4757"
+        }}>
+          ${(editing.pnl || 0).toFixed(4)}
+        </div>
+      </div>
+
+      {/* STOP LOSS / TAKE PROFIT */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          placeholder="Stop Loss"
+          value={editing.sl || ""}
+          onChange={e =>
+            setEditing({ ...editing, sl: e.target.value })
+          }
+          style={input}
+        />
+
+        <input
+          placeholder="Take Profit"
+          value={editing.tp || ""}
+          onChange={e =>
+            setEditing({ ...editing, tp: e.target.value })
+          }
+          style={input}
+        />
+      </div>
+
+      {/* ACTIONS */}
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+
+        <button
+          style={primary}
+          onClick={() => {
+            setTrades((prev: any[]) =>
+              prev.map(t =>
+                t.id === editing.id ? editing : t
+              )
+            );
+            setEditing(null);
+            notify("Trade updated", "success");
+          }}
+        >
+          Save
+        </button>
+
+        <button
+          style={danger}
+          onClick={() => {
+            setTrades((prev: any[]) =>
+              prev.map(t =>
+                t.id === editing.id
+                  ? { ...t, status: "CLOSED" }
+                  : t
+              )
+            );
+            setEditing(null);
+            notify("Trade closed", "info");
+          }}
+        >
+          Close Trade
+        </button>
+
+      </div>
+
     </div>
+  </div>
+)}
+     
+    </>
+
   );
 }

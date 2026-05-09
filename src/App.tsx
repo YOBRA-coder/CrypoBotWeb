@@ -1,11 +1,11 @@
 // App.tsx — NexusAI Trading Platform
+import { Routes,  Route,  Navigate, useNavigate, NavLink} from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Ticker, Bot, Trade, Signal, Strategy, Page, KlineUpdate } from "./types";
 import { PAIR_DISPLAY } from "./types";
 import { marketApi, signalsApi, botsApi, tradesApi, strategiesApi } from "./api/client";
-
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -15,6 +15,8 @@ import BotsPage from "./pages/BotsPage";
 import StrategyPage from "./pages/StrategyPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import BotDetails from "./pages/BotsDetails";
+import { useLocation } from "react-router-dom";
 
 // ── CSS injection ─────────────────────────────────────────────────────────────
 const css = `
@@ -43,16 +45,19 @@ if (!document.getElementById("nxcss")) {
 }
 
 export default function App() {
-  return <AuthProvider><Router /></AuthProvider>;
+  return <AuthProvider><AppRouter /></AuthProvider>;
 }
 
-function Router() {
+function AppRouter() {
   const { auth } = useAuth();
-  const [page, setPage] = useState<"login" | "signup">("login");
-  if (!auth.user) {
-    return page === "login"
-      ? <LoginPage onSwitch={() => setPage("signup")} />
-      : <SignupPage onSwitch={() => setPage("login")} />;
+   if (!auth.user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
+    );
   }
   return <MainShell />;
 }
@@ -60,11 +65,12 @@ function Router() {
 // ── Main Shell ────────────────────────────────────────────────────────────────
 function MainShell() {
   const { auth, logout } = useAuth();
-  const [page, setPage] = useState<Page>("dashboard");
-  const [sideOpen, setSideOpen] = useState(true);
+  const navigate = useNavigate();
+ // const [page, setPage] = useState<Page>("dashboard");
+  const [sideOpen, setSideOpen] = useState(window.innerWidth >= 768);
   const [clock, setClock] = useState(new Date().toLocaleTimeString());
   const [notif, setNotif] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
-
+  const location = useLocation();
   // State fed from both HTTP init and WebSocket updates
   const [tickers, setTickers] = useState<Ticker[]>([]);
   const [Klines, setKlines] = useState<KlineUpdate[]>([]);
@@ -73,12 +79,14 @@ function MainShell() {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [wsStatus, setWsStatus] = useState<"connecting" | "live" | "offline">("connecting");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const notify = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setNotif({ msg, type });
     setTimeout(() => setNotif(null), 3800);
   }, []);
 
+  
   // HTTP initial load
   useEffect(() => {
     if (!auth.token) return;
@@ -97,6 +105,24 @@ function MainShell() {
   useEffect(() => {
     const id = setInterval(() => setClock(new Date().toLocaleTimeString()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setSideOpen(false);
+    } else {
+      setSideOpen(true);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   // WebSocket
@@ -125,52 +151,108 @@ function MainShell() {
     { id: "settings", icon: "⊕", label: "Settings" },
   ];
 
+
+  const bottomNav: { id: Page; icon: string; label: string }[] = [
+    { id: "dashboard", icon: "◈", label: "Dashboard" },
+    { id: "trading", icon: "◎", label: "Trading" },
+    { id: "signals", icon: "◉", label: "Signals" },
+    { id: "bots", icon: "⬡", label: "Bots" },
+    //{ id: "strategy", icon: "◇", label: "Strategy" },
+    //{ id: "history", icon: "◫", label: "History" },
+    { id: "settings", icon: "⊕", label: "Settings" },
+  ];
+
+
   const pp = { tickers, signals, setSignals, bots, setBots, trades, setTrades, strategies, setStrategies, notify };
 
   const statusColor = wsStatus === "live" ? "#00d084" : wsStatus === "offline" ? "#ff4757" : "#ffd700";
-
+  const currentPage =
+  nav.find((n) => location.pathname === `/${n.id}`)?.label ||
+  "Dashboard";
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#070d17" }}>
       {/* ── Sidebar ── */}
-      <aside style={{ width: sideOpen ? 220 : 58, flexShrink: 0, background: "#070d17", borderRight: "1px solid #0a1828", display: "flex", flexDirection: "column", transition: "width .2s ease", overflow: "hidden" }}>
-        <div style={{ padding: "16px 10px", display: "flex", alignItems: "center", gap: 9, cursor: "pointer", borderBottom: "1px solid #0a1828", flexShrink: 0 }} onClick={() => setSideOpen(x => !x)}>
-          <span style={{ color: "#00d084", fontSize: 22, flexShrink: 0 }}>⬡</span>
-          {sideOpen && <span style={{ color: "#e0eaf5", fontWeight: 900, fontSize: 15, letterSpacing: 3, whiteSpace: "nowrap" }}>NEXUS<span style={{ color: "#00d084" }}>AI</span></span>}
-        </div>
-
-        <nav style={{ flex: 1, padding: "8px 6px", overflowY: "auto" }}>
-          {nav.map(n => (
-            <div key={n.id} className="nav-item"
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 9px", borderRadius: 7, cursor: "pointer", marginBottom: 2, transition: "all .15s", color: page === n.id ? "#00d084" : "#4a6080", background: page === n.id ? "#0d1a2a" : "transparent", borderLeft: `2px solid ${page === n.id ? "#00d084" : "transparent"}` }}
-              onClick={() => setPage(n.id)}>
-              <span style={{ fontSize: 13, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
-              {sideOpen && <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{n.label}</span>}
-            </div>
-          ))}
-        </nav>
-
-        <div style={{ borderTop: "1px solid #0a1828", padding: "8px 6px", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", cursor: "pointer", borderRadius: 7 }} onClick={() => setPage("settings")}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#00d084,#0094ff)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, color: "#000", flexShrink: 0 }}>
-              {auth.user?.name?.[0]?.toUpperCase()}
-            </div>
-            {sideOpen && (
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#e0eaf5", fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{auth.user?.name}</div>
-                <div style={{ color: "#2e4060", fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{auth.user?.email}</div>
-              </div>
-            )}
+      {!isMobile && (
+        <aside style={{
+          width: sideOpen ? 220 : 58, flexShrink: 0, background: "#070d17", borderRight: "1px solid #0a1828", display: "flex", flexDirection: "column", transition: "width .2s ease", overflow: "hidden"
+        }}>
+          <div style={{ padding: "16px 10px", display: "flex", alignItems: "center", gap: 9, cursor: "pointer", borderBottom: "1px solid #0a1828", flexShrink: 0 }} onClick={() => setSideOpen(x => !x)}>
+            <span style={{ color: "#00d084", fontSize: 22, flexShrink: 0 }}>⬡</span>
+            {sideOpen && <span style={{ color: "#e0eaf5", fontWeight: 900, fontSize: 15, letterSpacing: 3, whiteSpace: "nowrap" }}>NEXUS<span style={{ color: "#00d084" }}>AI</span></span>}
           </div>
-          {sideOpen && <div style={{ color: "#2e4060", fontSize: 10, padding: "5px 9px", cursor: "pointer", marginTop: 2 }} onClick={logout}>⏻ Sign out</div>}
-        </div>
-      </aside>
+
+          <nav style={{ flex: 1, padding: "8px 6px", overflowY: "auto" }}>
+            {nav.map(n => (
+              <NavLink
+      key={n.id}
+      to={`/${n.id}`}
+      className="nav-item"
+      style={({ isActive }) => ({
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 9px",
+        borderRadius: 7,
+        cursor: "pointer",
+        marginBottom: 2,
+        transition: "all .15s",
+        textDecoration: "none",
+        color: isActive ? "#00d084" : "#4a6080",
+        background: isActive ? "#0d1a2a" : "transparent",
+        borderLeft: `2px solid ${
+          isActive ? "#00d084" : "transparent"
+        }`,
+      })}
+    >
+      <span
+        style={{
+          fontSize: 13,
+          width: 18,
+          textAlign: "center",
+          flexShrink: 0,
+        }}
+      >
+        {n.icon}
+      </span>
+
+      {sideOpen && (
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {n.label}
+        </span>
+      )}
+    </NavLink>
+            ))}
+          </nav>
+
+          <div style={{ borderTop: "1px solid #0a1828", padding: "8px 6px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", cursor: "pointer", borderRadius: 7 }} onClick={() => navigate("settings")}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#00d084,#0094ff)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, color: "#000", flexShrink: 0 }}>
+                {auth.user?.name?.[0]?.toUpperCase()}
+              </div>
+              {sideOpen && (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: "#e0eaf5", fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{auth.user?.name}</div>
+                  <div style={{ color: "#2e4060", fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{auth.user?.email}</div>
+                </div>
+              )}
+            </div>
+            {sideOpen && <div style={{ color: "#2e4060", fontSize: 10, padding: "5px 9px", cursor: "pointer", marginTop: 2 }} onClick={logout}>⏻ Sign out</div>}
+          </div>
+        </aside>
+      )}
 
       {/* ── Main ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         {/* Topbar */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 20px", height: 50, borderBottom: "1px solid #0a1828", background: "#070d17", flexShrink: 0 }}>
           <div style={{ color: "#e0eaf5", fontSize: 14, fontWeight: 700, letterSpacing: 2 }}>
-            {nav.find(n => n.id === page)?.label?.toUpperCase()}
+          {currentPage.toUpperCase()}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, background: `${statusColor}18`, border: `1px solid ${statusColor}44`, borderRadius: 20, padding: "3px 9px" }}>
@@ -197,24 +279,73 @@ function MainShell() {
         )}
 
         {/* Page content */}
-        <main style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
-          {page === "dashboard"  && <DashboardPage {...pp} />}
-          {page === "trading"    && <TradingPage {...pp} />}
-          {page === "signals"    && <SignalsPage {...pp} />}
-          {page === "bots"       && <BotsPage {...pp} />}
-          {page === "strategy"   && <StrategyPage {...pp} />}
-          {page === "history"    && <HistoryPage {...pp} />}
-          {page === "settings"   && <SettingsPage notify={notify} />}
-        </main>
+        <main
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: isMobile ? "18px 14px 90px" : "18px 20px",
+          }}
+        > <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" />} />
+          <Route path="/dashboard" element={<DashboardPage {...pp} />} />
+          <Route path="/trading" element={<TradingPage {...pp}/>} />
+          <Route path="/signals" element={<SignalsPage {...pp}/>} />
+          <Route path="/bots" element={<BotsPage {...pp}/>} />
+          <Route path="/strategy" element={<StrategyPage {...pp}/>} />
+          <Route path="/history" element={<HistoryPage {...pp} />} />
+          <Route path="/settings" element={<SettingsPage {...pp}/>} />
+          <Route path="/bot/:id" element={<BotDetails {...pp} />} />
+          <Route path="/trading/:pair" element={<TradingPage {...pp} />} />
+        </Routes>        </main>
+
+        {/* Mobile Bottom Navigation */}
+        {isMobile && (
+          <nav
+            style={{
+              height: 64,
+              background: "#070d17",
+              borderTop: "1px solid #0a1828",
+              display: "flex",
+              justifyContent: "space-around",
+              alignItems: "center",
+              position: "fixed",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 999,
+            }}
+          >
+            {bottomNav.map((n) => (
+                  <NavLink
+      key={n.id}
+      to={`/${n.id}`}
+      style={({ isActive }) => ({
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        color: isActive ? "#00d084" : "#4a6080",
+        fontSize: 11,
+        textDecoration: "none",
+        flex: 1,
+      })}
+    >
+      <span style={{ fontSize: 18 }}>{n.icon}</span>
+      <span>{n.label}</span>
+    </NavLink>
+            ))}
+          </nav>
+        )}
+
       </div>
 
       {/* Notification toast */}
       {notif && (
         <div style={{ position: "fixed", bottom: 22, right: 22, zIndex: 9999, animation: "fadeUp .3s ease", maxWidth: 360, borderRadius: 10, padding: "11px 18px", color: "#000", fontWeight: 700, fontSize: 12, letterSpacing: 0.5, background: notif.type === "success" ? "#00d084" : notif.type === "error" ? "#ff4757" : "#0094ff", boxShadow: "0 8px 32px #00000060" }}>
           {notif.msg}
-          {notif.type=="success"? "Successful" : "Failed."}
+          {notif.type == "success" ? "Successful" : "Failed."}
           {notif.type}
-   
+
         </div>
       )}
     </div>

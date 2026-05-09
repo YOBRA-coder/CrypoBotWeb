@@ -5,7 +5,7 @@ import type {
 } from "../types";
 
 const BASE = "https://cryptobotapi.onrender.com";
-
+//const BASE = "http://localhost:8000";
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);

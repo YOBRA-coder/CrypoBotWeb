@@ -2,13 +2,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { S, authBg } from "./styles";
+import { Navigate, useNavigate } from "react-router";
 
-export default function LoginPage({ onSwitch }: { onSwitch: () => void }) {
+export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("demo@nexusai.trade");
   const [password, setPassword] = useState("demo123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handle = async () => {
     setLoading(true); setError("");
@@ -27,7 +29,7 @@ export default function LoginPage({ onSwitch }: { onSwitch: () => void }) {
         {error && <div style={S.err}>{error}</div>}
         <button style={S.btn} onClick={handle} disabled={loading}>{loading ? "Authenticating..." : "Sign In →"}</button>
         <div style={{ textAlign: "center", marginTop: 18, color: "#2e4060", fontSize: 11 }}>
-          No account? <span style={{ color: "#00d084", cursor: "pointer" }} onClick={onSwitch}>Create one</span>
+          No account? <span style={{ color: "#00d084", cursor: "pointer" }} onClick={()=> navigate("/signup")}>Create one</span>
         </div>
         <div style={{ textAlign: "center", marginTop: 20, color: "#1a2535", fontSize: 10, borderTop: "1px solid #0a1828", paddingTop: 14 }}>
           Demo: demo@nexusai.trade / demo123

@@ -18,8 +18,10 @@ export const S: Record<string, CSSProperties> = {
   inp: { width: "100%", background: "#040a12", border: "1px solid #0d1a2a", borderRadius: 7, padding: "9px 12px", color: "#e0eaf5", fontSize: 12, fontFamily: "'IBM Plex Mono',monospace", transition: "border-color .15s, box-shadow .15s" },
   btn: { width: "100%", background: "#00d084", color: "#000", border: "none", borderRadius: 7, padding: "11px", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "'IBM Plex Mono',monospace", letterSpacing: 1 },
   btnO: { background: "transparent", border: "1px solid #1a2535", borderRadius: 7, padding: "9px 16px", color: "#4a6080", cursor: "pointer", fontFamily: "'IBM Plex Mono',monospace", fontSize: 11 },
+  danger: { width: "100%", background: "#ff4757", color: "#000", border: "none", borderRadius: 7, padding: "11px", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "'IBM Plex Mono',monospace", letterSpacing: 1 },
   err: { background: "#ff475718", border: "1px solid #ff475744", borderRadius: 7, padding: "9px 12px", color: "#ff4757", fontSize: 11, marginBottom: 12 },
   card: { background: "#080e18", border: "1px solid #0a1828", borderRadius: 12, padding: "15px 17px" },
   ch: { color: "#2e4060", fontSize: 9, fontWeight: 700, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 13, paddingBottom: 9, borderBottom: "1px solid #0a1828" },
   pill: { display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 20, padding: "3px 8px", fontSize: 9, fontWeight: 700 },
+  
 };

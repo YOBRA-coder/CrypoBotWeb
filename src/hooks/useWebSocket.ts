@@ -1,11 +1,11 @@
 // hooks/useWebSocket.ts — Real-time WebSocket connection to Python backend
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import type { WSMessage, Ticker, Bot, Trade, Signal, KlineUpdate,  } from "../types";
+import type { WSMessage, Ticker, Bot, Trade, Signal, KlineMessage, KlineUpdate,  } from "../types";
 
 const WS_BASE = "wss://cryptobotapi.onrender.com";
 //const WS_BASE = "wss://614a-102-207-163-35.ngrok-free.app";
-
+//const WS_BASE = "ws://localhost:8000";
 interface WSState {
   connected: boolean;
   reconnecting: boolean;
@@ -18,7 +18,7 @@ interface WSHandlers {
   onNewTrade?: (trade: Trade) => void;
   onNewSignals?: (signals: Signal[]) => void;
   onInit?: (data: { bots: Bot[]; trades: Trade[]; signals: Signal[] }) => void;
-  onKline?: (kline: KlineUpdate[]) => void; }
+  onKline?: (msg: KlineUpdate) => {}; }
 
 export function useWebSocket(token: string | null, handlers: WSHandlers) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -50,7 +50,7 @@ export function useWebSocket(token: string | null, handlers: WSHandlers) {
           case "NEW_TRADE":  h.onNewTrade?.(msg.data); break;
           case "NEW_SIGNALS": h.onNewSignals?.(msg.data); break;
           case "INIT":       h.onInit?.(msg.data); break;
-          case "KLINE": h.onKline?.(msg.data); break;
+          //case "KLINE": h.onKline?.(msg.data); break;
           case "PING":
             ws.send(JSON.stringify({ type: "PONG" }));
             setState(s => ({ ...s, lastPing: Date.now() }));

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import TradeModal from "./TradeModal";
 
 
 // ─── Types (mirror your existing ../types OHLCV) ─────────────────────────────
@@ -41,6 +42,8 @@ export interface ProTradingChartProps {
   timeframes?: string[];
   /** Height of the chart area in px (default 540) */
   height?: number;
+  onTradeClick?: (trade: Trade) => void
+
 }
 
 // ─── Internal types ──────────────────────────────────────────────────────────
@@ -158,7 +161,8 @@ export default function ProTradingChart({
   timeframe = "1H",
   onTimeframeChange,
   timeframes = DEFAULT_TIMEFRAMES,
-  height = 240,
+  height,
+  onTradeClick,
 }: ProTradingChartProps): JSX.Element {
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -173,33 +177,99 @@ export default function ProTradingChart({
   const [orderBook, setOrderBook] = useState<OrderBook>(() =>
     mockOrderBook(candles[candles.length - 1]?.close ?? 3000)
   );
+  const [animatedCandles, setAnimatedCandles] = useState<OHLCV[]>([])
 
   // ── Chart-navigation state ──────────────────────────────────────────────────
   const [offset, setOffset] = useState(0);
   const [candleW, setCandleW] = useState(10);
   const [hovered, setHovered] = useState<HoveredCandle | null>(null);
   const [crosshair, setCrosshair] = useState<Crosshair | null>(null);
-  const [dims, setDims] = useState<Dims>({ w: 900, h: height });
+  const [dims, setDims] = useState<Dims>({
+    w: window.innerWidth,
+    h: height || window.innerHeight * 0.72
+  });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartX = useRef<number | null>(null);
   const dragStartOff = useRef(0);
-
-  // Sync height prop
-  useEffect(() => setDims(d => ({ ...d, h: height })), [height]);
+  const rafRef = useRef<number>();
+  const isMobile = dims.w < 768
 
   // Resize observer
   useEffect(() => {
     if (!containerRef.current) return;
-    const ro = new ResizeObserver(([e]) =>
-      setDims({ w: e.contentRect.width, h: Math.max(380, e.contentRect.height) })
-    );
+
+    const resize = () => {
+      if (!containerRef.current) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+
+      const mobile = rect.width < 768;
+
+      setDims({
+        w: rect.width,
+        h: height
+          ? height
+          : mobile
+            ? Math.max(420, window.innerHeight * 0.58)
+            : Math.max(520, window.innerHeight * 0.72)
+      });
+    };
+
+    resize();
+
+    const ro = new ResizeObserver(() => {
+      resize();
+    });
+
     ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, []);
-  // --- REMOVE THE MERGING LOGIC HERE ---
+
+    window.addEventListener("resize", resize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, [height]);
   // Simply use the 'candles' passed from props
   const lastClose = candles[candles.length - 1]?.close;
+  useEffect(() => {
+    if (isMobile) {
+      setCandleW(4.5);
+    } else if (dims.w < 1200) {
+      setCandleW(7);
+    } else {
+      setCandleW(9);
+    }
+  }, [isMobile, dims.w]);
 
+  useEffect(() => {
+    setAnimatedCandles(prev => {
+      const next = [...prev]
+
+      const incoming = candles[candles.length - 1]
+      const last = next[next.length - 1]
+
+      if (!last) return candles
+
+      if (last.time === incoming.time) {
+        next[next.length - 1] = {
+          ...last,
+          close: incoming.close,
+          high: Math.max(last.high, incoming.high),
+          low: Math.min(last.low, incoming.low),
+          volume: incoming.volume
+        }
+      } else {
+        next.push(incoming)
+
+        if (next.length > 500) {
+          next.shift()
+        }
+      }
+
+      return next
+    })
+  }, [candles])
   // Keep visual-only effects
   const prevLen = useRef(candles.length);
   useEffect(() => {
@@ -220,7 +290,13 @@ export default function ProTradingChart({
   const hasRSI = activeIndicators.has("rsi");
   const hasMACD = activeIndicators.has("macd");
   const subCount = (hasRSI ? 1 : 0) + (hasMACD ? 1 : 0);
-  const mainH = Math.max(80, dims.h - PAD.t - PAD.b - subCount * (SUB_H + SUB_GAP));
+  const reservedHeight =
+    PAD.t +
+    PAD.b +
+    (hasRSI ? SUB_H + SUB_GAP : 0) +
+    (hasMACD ? SUB_H + SUB_GAP : 0);
+
+  const mainH = Math.max(220, dims.h - reservedHeight);
   const W = dims.w - PAD.l - PAD.r;
 
   const visibleCount = Math.max(1, Math.floor(W / (candleW + CANDLE_GAP)));
@@ -268,7 +344,7 @@ export default function ProTradingChart({
   // Sub-panel positions
   const rsiPanelY = PAD.t + mainH + PAD.b + 6;
   const macdPanelY = rsiPanelY + (hasRSI ? SUB_H + SUB_GAP : 0);
-  const totalH = macdPanelY + (hasMACD ? SUB_H : 0) + PAD.b;
+  const totalH = mainH + PAD.t + PAD.b + (hasRSI ? SUB_H + SUB_GAP : 0) + (hasMACD ? SUB_H + SUB_GAP : 0);
 
   // ── Wheel zoom/pan ────────────────────────────────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -307,7 +383,9 @@ export default function ProTradingChart({
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
     if (e.touches.length === 2 && lastTouchDist.current !== null) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -330,32 +408,38 @@ export default function ProTradingChart({
     lastTouchX.current = null;
   }, []);
 
+  useEffect(() => {
+    setOffset(0)
+  }, [animatedCandles[animatedCandles.length - 1]?.time])
 
   // ── Mouse events ──────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    cancelAnimationFrame(rafRef.current!)
+    rafRef.current = requestAnimationFrame(() => {
 
-    if (isDragging && dragStartX.current !== null) {
-      const delta = mx - dragStartX.current;
-      const step = Math.round(delta / (candleW + CANDLE_GAP));
-      if (step !== 0) {
-        setOffset(Math.max(0, Math.min(candles.length - visibleCount, dragStartOff.current - step)));
+      if (!svgRef.current) return;
+      const rect = svgRef.current.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (isDragging && dragStartX.current !== null) {
+        const delta = mx - dragStartX.current;
+        const step = Math.round(delta / (candleW + CANDLE_GAP));
+        if (step !== 0) {
+          setOffset(Math.max(0, Math.min(candles.length - visibleCount, dragStartOff.current - step)));
+        }
       }
-    }
-
-    const price = minP + ((PAD.t + mainH - my) / mainH) * range;
-    const ci = Math.floor((mx - PAD.l) / (candleW + CANDLE_GAP));
-    const candle = slice[ci];
-    if (my >= PAD.t && my <= PAD.t + mainH) {
-      setCrosshair({ x: mx, y: my, price, time: candle?.time });
-      setHovered(candle ? { candle, ci } : null);
-    } else {
-      setCrosshair(null);
-      setHovered(null);
-    }
+      const price = minP + ((PAD.t + mainH - my) / mainH) * range;
+      const ci = Math.floor((mx - PAD.l) / (candleW + CANDLE_GAP));
+      const candle = slice[ci];
+      if (my >= PAD.t && my <= PAD.t + mainH) {
+        setCrosshair({ x: mx, y: my, price, time: candle?.time });
+        setHovered(candle ? { candle, ci } : null);
+      } else {
+        setCrosshair(null);
+        setHovered(null);
+      }
+    });
   }, [isDragging, candleW, slice, minP, range, mainH, candles.length, visibleCount]);
 
   const toggleIndicator = (id: IndicatorId): void =>
@@ -365,13 +449,14 @@ export default function ProTradingChart({
       return next;
     });
 
+  const topTen = trades.filter(t => t.status === "FILLED").slice(-10).reverse();
   // ══════════════════════════════════════════════════════════════════════════
   return (
     <div style={{
       fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace",
       background: "#070b11", color: "#c5d4e8",
       display: "flex", flexDirection: "column",
-      width: "100%", height: "100%", minHeight: height,
+      width: "100%", height: "100%",
       border: "1px solid #0d1c2e",
       borderRadius: 10,
       userSelect: "none", overflow: "hidden",
@@ -379,9 +464,8 @@ export default function ProTradingChart({
 
       {/* ════ TOP BAR ══════════════════════════════════════════════════════ */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "7px 12px",
-        borderBottom: "1px solid #0d1c2e", background: "#07111c",
-        flexWrap: "wrap", flexShrink: 0,
+        display: "flex", alignItems: "center", borderBottom: "1px solid #0d1c2e", background: "#07111c",
+        flexWrap: "wrap", rowGap: 6, padding: isMobile ? "6px 8px" : "7px 12px", gap: isMobile ? 6 : 12, flexShrink: 0,
       }}>
 
         {/* Symbol + live indicator */}
@@ -391,7 +475,7 @@ export default function ProTradingChart({
             boxShadow: `0 0 6px ${GREEN}`, animation: "ptcPulse 2s infinite",
           }} />
           <span style={{ fontSize: 15, fontWeight: 800, color: "#e8f3ff", letterSpacing: 0.5 }}>{symbol}</span>
-          <span style={{ fontSize: 9, color: "#1e3a55", background: "#0a1828", padding: "1px 6px", borderRadius: 3, letterSpacing: 1 }}>
+          <span style={{ fontSize: 9, color: "#9d6600", background: "#0a1828", padding: "1px 6px", borderRadius: 3, letterSpacing: 1 }}>
             {marketType}
           </span>
         </div>
@@ -401,7 +485,7 @@ export default function ProTradingChart({
           <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
 
             <span style={{ fontSize: 21, fontWeight: 800, color: isBull ? GREEN : RED, transition: "color 0.25s" }}>
-              {fPrice(lastCandle.close)}
+              {(lastCandle.close)}
             </span>
             <span style={{
               fontSize: 11, fontWeight: 700,
@@ -540,14 +624,26 @@ export default function ProTradingChart({
       </div>
 
       {/* ════ MAIN LAYOUT ══════════════════════════════════════════════════ */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
-
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          flex: 1,
+          overflow: "hidden",
+          minHeight: 0,
+        }}
+      >
         {/* ── SVG Chart ───────────────────────────────────────────────────── */}
-        <div ref={containerRef} style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}
+        <div
+          ref={containerRef}
+          style={{
+            flex: 1, position: "relative", minWidth: 0, minHeight: 0, width: "100%",
+            height: "100%", overflow: "hidden", display: "flex"
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}>
-          {candles.length === 0 ? (
+          {animatedCandles.length === 0 ? (
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center", color: "#1a3050", gap: 10,
@@ -558,10 +654,11 @@ export default function ProTradingChart({
           ) : (
             <svg
               ref={svgRef}
-              width={dims.w} height={"500"}
-              viewBox={`0 0 ${dims.w} ${totalH}`}
-              preserveAspectRatio="none"
-              style={{ display: "block", cursor: isDragging ? "grabbing" : "crosshair", touchAction: "none" }}
+              width="100%" height="100%"
+              viewBox={`0 0 ${dims.w} ${dims.h}`}
+              preserveAspectRatio="xMidYMid meet"
+              style={{ display: "block", cursor: isDragging ? "grabbing" : "crosshair", touchAction: "none", willChange: "transform", backfaceVisibility: "hidden", transform: "translateZ(0)", }}
+
               onMouseDown={e => {
                 setIsDragging(true);
                 const rect = svgRef.current?.getBoundingClientRect();
@@ -635,8 +732,8 @@ export default function ProTradingChart({
                 if (!v || y < PAD.t - 2 || y > PAD.t + mainH + 2) return null;
                 return (
                   <g key={tag}>
-                    <line x1={PAD.l} y1={y} x2={dims.w - PAD.r} y2={y} stroke={col} strokeWidth={0.8} strokeDasharray="2,4" />
-                    <text x={PAD.l + 4} y={y - 2} fontSize={8} fill={col} fontFamily="inherit">{tag}</text>
+                    <line x1={PAD.l} y1={y} x2={dims.w - PAD.r} y2={y} stroke={col} strokeWidth={0.8} strokeDasharray="4,6" />
+                    <text x={PAD.l + 4} y={y - 2} fontSize={12} fill={col} fontWeight={"bolder"} fontFamily="inherit">{tag}</text>
                   </g>
                 );
               })}
@@ -688,6 +785,7 @@ export default function ProTradingChart({
                     ].join(" ")}
                     fill="url(#ptcLineG)" />
                 </g>
+
               )}
 
               {/* ── Candlesticks ── */}
@@ -716,15 +814,19 @@ export default function ProTradingChart({
                   })}
                 </g>
               )}
-              {trades.map(t => {
+              {topTen.map(t => {
 
                 const y = toY(t.price)
                 return (
-                  <g key={t.id}>
+                  <g
+                    key={t.id}
+                    onClick={() => onTradeClick && onTradeClick(t)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <line x1={PAD.l} y1={y} x2={dims.w - PAD.r} y2={y}
-                      stroke={t.side === "BUY" ? "#0ECB81" : "#F6465D"} strokeDasharray="4 4" />
+                      stroke={t.side === "BUY" ? "#0ECB81" : "#F6465D"} strokeDasharray="8 8" />
                     <text x={dims.w - PAD.r + 4} y={y - 2} fill={t.side === "BUY" ? "#0ECB81" : "#F6465D"}
-                      fontSize={8} fontFamily="inherit">
+                      fontSize={12} fontFamily="inherit">
                       {t.side} {f2(t.price, 0)}
                     </text>
                   </g>
@@ -760,7 +862,7 @@ export default function ProTradingChart({
                     <rect x={dims.w - PAD.r} y={py - 9} width={PAD.r} height={18} fill={col} rx={3} />
                     <text x={dims.w - PAD.r + 5} y={py + 4.5}
                       fontSize={10} fontWeight={700} fill="#070b11" fontFamily="inherit">
-                      {fPrice(lastCandle.close)}
+                      {(lastCandle.close)}
                     </text>
                   </g>
                 );
@@ -925,7 +1027,6 @@ export default function ProTradingChart({
 
             </svg>
           )}
-
           {/* Hint */}
           <div style={{
             position: "absolute", bottom: 4, left: 8, fontSize: 9,
@@ -936,9 +1037,9 @@ export default function ProTradingChart({
         </div>
 
         {/* ════ ORDER BOOK ═══════════════════════════════════════════════ */}
-        {showOrderBook && (
+        {showOrderBook && dims.w > 900 && (
           <div style={{
-            width: 172, background: "#050910",
+            width: dims.w < 1100 ? 130 : 172, background: "#050910",
             borderLeft: "1px solid #0a1828",
             display: "flex", flexDirection: "column",
             overflow: "hidden", flexShrink: 0,
@@ -1015,7 +1116,7 @@ export default function ProTradingChart({
         )}
       </div>
 
-      <style>{`@keyframes @keyframes ptcPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+      <style>{`@keyframes ptcPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: #04080f; }
         ::-webkit-scrollbar-thumb { background: #0d1c2e; border-radius: 2px; }

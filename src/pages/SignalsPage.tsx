@@ -5,11 +5,14 @@ import { PAIR_DISPLAY } from "../types";
 import { signalsApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { S } from "./styles";
+import { useNavigate } from "react-router";
 
 export default function SignalsPage({ signals, setSignals, notify }: PageProps) {
   const { auth } = useAuth();
+  const navigate = useNavigate();
   const [gen, setGen] = useState(false);
   const [sending, setSending] = useState<string | null>(null);
+    const [sendingCopy, setSendingCopy] = useState<string | null>(null);
   const [filter, setFilter] = useState<"ALL" | "BUY" | "SELL" | "HOLD">("ALL");
 
   const generate = async () => {
@@ -35,12 +38,12 @@ export default function SignalsPage({ signals, setSignals, notify }: PageProps) 
 
   const copyTrade = async (s: typeof signals[0]) => {
     if (!auth.token) return;
-    setSending(s.id);
+    setSendingCopy(s.id);
     try {
       await signalsApi.copy(auth.token, s.id );
       notify("Signal copied to trade! ✈", "success");
     } catch (e: any) { notify(e.message || "Copy trade failed", "error"); }
-    setSending(null);
+    setSendingCopy(null);
   };
 
 
@@ -72,9 +75,9 @@ export default function SignalsPage({ signals, setSignals, notify }: PageProps) 
           const sl = s.stop_loss ?? s.stopLoss ?? s.price;
           const isAI = !!(s.ai_generated || s.aiGenerated);
           return (
-            <div key={s.id} style={{ background: "#0c1420", border: `1px solid ${s.type === "BUY" ? "#00d08444" : s.type === "SELL" ? "#ff475744" : "#ffd70044"}`, borderRadius: 11, padding: 15 }}>
+            <div key={s.id} style={{ background: "#0c1420", border: `1px solid ${s.type === "BUY" ? "#00d08444" : s.type === "SELL" ? "#ff475744" : "#ffd70044"}`, borderRadius: 11, padding: 15, }} >
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 9 }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }} onClick={() => navigate('/trading?pair=' + s.pair)}>
                   <span style={{ color: "#e0eaf5", fontWeight: 800, fontSize: 14 }}>{PAIR_DISPLAY[s.pair] || s.pair}</span>
                   {isAI && <span style={{ background: "#0094ff18", border: "1px solid #0094ff44", color: "#0094ff", fontSize: 8, padding: "1px 5px", borderRadius: 3, fontWeight: 700 }}>AI</span>}
                 </div>
@@ -96,10 +99,10 @@ export default function SignalsPage({ signals, setSignals, notify }: PageProps) 
                   </div>
                   <span style={{ color: "#4a6080", fontSize: 9 }}>{(s.confidence || 0).toFixed(0)}%</span>
                 </div>
-                <button style={{ background: "#0094ff18", border: "1px solid #0094ff44", color: "#0094ff", borderRadius: 6, padding: "4px 11px", cursor: "pointer", fontSize: 10, fontFamily: "inherit" }} onClick={() => copyTrade(s)} disabled={sending === s.id}>
-                  {sending === s.id ? "..." : "✈ Copy"}
+                <button style={{ background: "#0094ff18", border: "1px solid #0094ff44", color: "#0094ff", borderRadius: 6, padding: "4px 11px", cursor: "pointer", fontSize: 10, fontFamily: "inherit" }} onClick={() => copyTrade(s)} disabled={sendingCopy === s.id}>
+                  {sendingCopy === s.id ? "..." : "✈ Copy"}
                 </button>
-                <button style={{ background: "#0094ff18", border: "1px solid #0094ff44", color: "#0094ff", borderRadius: 6, padding: "4px 11px", cursor: "pointer", fontSize: 10, fontFamily: "inherit" }} onClick={() => sendTG(s)} disabled={sending === s.id}>
+                <button style={{ background: "#0094ff18", border: "1px solid #0094ff44", color: "#0094ff", borderRadius: 6, padding: "4px 11px", cursor: "pointer", fontSize: 10, fontFamily: "inherit" }} onClick={() => sendTG(s)} disabled={sendingCopy === s.id}>
                   {sending === s.id ? "..." : "✈ Send"}
                 </button>
               </div>

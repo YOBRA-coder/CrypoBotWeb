@@ -107,15 +107,25 @@ export interface BacktestResult {
   maxDrawdown: number;
 }
 // In your types file
-export type KlineUpdate = {
-  
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
+export interface KlineUpdate {
+  symbol: string;
+  interval: string;
+  data: {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    closed: boolean;
+  };
+}
+
+export type KlineMessage = {
+  symbol: string;
+  interval: string;
+  data: KlineUpdate[];
+}
 
 // WebSocket message types
 export type WSMessage =

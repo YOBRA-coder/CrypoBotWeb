@@ -5,11 +5,13 @@ import { PAIR_DISPLAY, PAIRS } from "../types";
 import { botsApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { S } from "./styles";
+import { useNavigate } from "react-router-dom";
 
 const STRATEGIES = ["RSI Scalper", "EMA Cross", "Grid Trading", "MACD Divergence", "Bollinger Squeeze"];
 
 export default function BotsPage({ bots, setBots, tickers, notify }: PageProps) {
   const { auth } = useAuth();
+  const navigation =  useNavigate();
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", pair: "BTCUSDT", strategy: "RSI Scalper", capital: "1000" });
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
@@ -85,7 +87,7 @@ export default function BotsPage({ bots, setBots, tickers, notify }: PageProps) 
         {bots.map(bot => {
           const t = tickers.find(t => t.symbol === bot.pair);
           return (
-            <div key={bot.id} style={{ background: "#0c1420", border: "1px solid #0a1828", borderRadius: 12, padding: 15 }}>
+            <div key={bot.id} style={{ background: "#0c1420", border: "1px solid #0a1828", borderRadius: 12, padding: 15, cursor: "pointer" }} onClick={() => navigation(`/bot/${bot.id}`)}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 11 }}>
                 <div>
                   <div style={{ color: "#e0eaf5", fontWeight: 800, fontSize: 14 }}>{bot.name}</div>
